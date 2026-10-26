@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="GameConfig" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/game_config.gd" id="1"]
+[ext_resource type="Resource" path="res://resources/levels/labyrinth.tres" id="2"]
+[ext_resource type="Resource" path="res://resources/powerup_catalog.tres" id="3"]
+
+[resource]
+script = ExtResource("1")
+screen_size = Vector2(720, 920)
+field_left = 34.0
+field_right = 686.0
+field_top = 108.0
+field_bottom = 852.0
+inner_left = 42.0
+inner_right = 678.0
+inner_top = 118.0
+paddle_y = 824.0
+paddle_width = 116.0
+paddle_height = 14.0
+initial_lives = 5
+random_seed = 1592639710
+base_ball_speed = 470.0
+wave_speed_increment = 18.0
+maximum_launch_balls = 7
+combo_multiball_limit = 6
+combo_first_multiball = 30
+combo_multiball_interval = 35
+powerup_drop_chance = 0.14
+powerup_pity_limit = 8
+powerup_max_active = 7
+powerup_max_balls = 24
+fire_drop_chance_multiplier = 0.72
+fire_duration = 6.0
+fire_charge_per_hit = 3.4
+level = ExtResource("2")
+powerups = ExtResource("3")

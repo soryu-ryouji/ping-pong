@@ -1,80 +1,47 @@
 extends SceneTree
 
+var failures := 0
+
+
 func _initialize() -> void:
-    var main = load("res://main.tscn").instantiate()
-    root.add_child(main)
-    main.state = "playing"
-    main.launch_ball(false)
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    world.state = GameWorld.State.PLAYING
+    world.launch_ball(false)
+    check(world.balls.size() == 1, "Expected one launch ball")
 
-    if main.balls.size() != 1:
-        push_error("Expected one launch ball")
-        quit(1)
-        return
+    world.spawn_powerup(&"multiball", Vector2(world.paddle_x, config.paddle_y))
+    world.update_powerups(0.016)
+    check(world.powerups.is_empty(), "Multiball pickup was not collected")
+    check(world.balls.size() == 2, "Multiball did not double active balls")
 
-    # Drop a multiball pickup directly onto the paddle and run one update.
-    main.powerups.append({
-        "pos": Vector2(main.paddle_x, main.PADDLE_Y),
-        "vel": Vector2.ZERO,
-        "kind": "multiball",
-        "color": main.CYAN,
-        "age": 0.0,
-        "phase": 0.0,
-    })
-    main.update_powerups(0.016)
-    if not main.powerups.is_empty():
-        push_error("Multiball pickup was not collected")
-        quit(1)
-        return
-    if main.balls.size() != 2:
-        push_error("Multiball did not double active balls: %d" % main.balls.size())
-        quit(1)
-        return
+    var multiball := config.powerups.get_definition(&"multiball")
+    multiball.apply(world, Vector2.ZERO)
+    check(world.balls.size() == 4, "Second multiball did not double 2 -> 4")
 
-    # Doubling again should turn 2 balls into 4.
-    main.apply_multiball_powerup(Vector2.ZERO)
-    if main.balls.size() != 4:
-        push_error("Second multiball did not double 2 -> 4: %d" % main.balls.size())
-        quit(1)
-        return
+    var speed_before := world.balls[0].velocity.length()
+    world.spawn_powerup(&"speed", Vector2(world.paddle_x, config.paddle_y))
+    world.update_powerups(0.016)
+    var speed_after := world.balls[0].velocity.length()
+    check(speed_after > speed_before, "Speed pickup did not increase ball speed")
 
-    var speed_before: float = main.balls[0]["vel"].length()
-    main.powerups.append({
-        "pos": Vector2(main.paddle_x, main.PADDLE_Y),
-        "vel": Vector2.ZERO,
-        "kind": "speed",
-        "color": main.GOLD,
-        "age": 0.0,
-        "phase": 0.0,
-    })
-    main.update_powerups(0.016)
-    var speed_after: float = main.balls[0]["vel"].length()
-    if speed_after <= speed_before:
-        push_error("Speed pickup did not increase ball speed: %.1f -> %.1f" % [speed_before, speed_after])
-        quit(1)
-        return
+    world.powerups.clear()
+    world.powerup_pity = 0
+    world.powerup_drop_counter = 0
+    for index in range(16):
+        world.try_drop_powerup(Vector2(300.0 + index, 300.0), false)
+    check(world.powerups.size() >= 2, "Expected at least two pity drops")
+    if world.powerups.size() >= 2:
+        check(world.powerups[0].definition.id == &"multiball", "First drop should be multiball")
+        check(world.powerups[1].definition.id == &"speed", "Second drop should be speed")
 
-    # Pity-based drop scheduling must expose both kinds, alternating.
-    main.powerups.clear()
-    main.powerup_pity = 0
-    main.powerup_drop_counter = 0
-    for i in range(16):
-        main.try_drop_powerup(Vector2(300.0 + i, 300.0), false)
-    if main.powerups.size() < 2:
-        push_error("Expected at least two pity drops, got %d" % main.powerups.size())
-        quit(1)
-        return
-    if main.powerups[0]["kind"] != "multiball" or main.powerups[1]["kind"] != "speed":
-        push_error("Powerup kinds did not alternate: %s, %s" % [main.powerups[0]["kind"], main.powerups[1]["kind"]])
-        quit(1)
-        return
+    if failures == 0:
+        print("POWERUP TEST PASS balls=%d speed=%.1f->%.1f drops=%d" % [world.balls.size(), speed_before, speed_after, world.powerups.size()])
+    quit(1 if failures > 0 else 0)
 
-    print("POWERUP TEST PASS balls=%d speed=%.1f->%.1f drops=%d kinds=%s/%s" % [
-        main.balls.size(),
-        speed_before,
-        speed_after,
-        main.powerups.size(),
-        main.powerups[0]["kind"],
-        main.powerups[1]["kind"],
-    ])
-    quit(0)
 
+func check(condition: bool, message: String) -> void:
+    if not condition:
+        failures += 1
+        push_error(message)

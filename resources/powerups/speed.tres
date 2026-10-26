@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SpeedPowerup" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/speed_powerup.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"speed"
+display_name = "SPEED UP"
+short_name = "SPEED"
+color = Color(1, 0.835294, 0.415686, 1)
+pickup_pitch = 1.24
+multiplier = 1.18
+maximum_speed = 980.0

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MultiballPowerup" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/multiball_powerup.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"multiball"
+display_name = "MULTIBALL"
+short_name = "MULTI"
+color = Color(0.470588, 0.956863, 1, 1)
+pickup_pitch = 1.0

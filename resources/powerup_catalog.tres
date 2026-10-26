@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="PowerupCatalog" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/powerup_catalog.gd" id="1"]
+[ext_resource type="Resource" path="res://resources/powerups/multiball.tres" id="2"]
+[ext_resource type="Resource" path="res://resources/powerups/speed.tres" id="3"]
+
+[resource]
+script = ExtResource("1")
+definitions = Array[ExtResource("2")]([ExtResource("2"), ExtResource("3")])
