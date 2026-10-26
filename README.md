@@ -1,13 +1,13 @@
 # Ricochet Labyrinth
 
-一个使用 Godot 4.7 制作的霓虹竖屏打砖块 / 迷宫弹球原型，玩法与视觉参考了 `preview.png`。
+一个使用 Godot 4.7 制作的霓虹竖屏打砖块 / 迷宫弹球游戏。视觉和音效均为程序化生成，不依赖外部美术、字体或音频素材。
 
 ## 运行
 
-用 Godot 4.7+ 打开本目录，直接运行主场景即可。
+用 Godot 4.7+ 打开本目录，运行主场景：
 
 ```powershell
-godot --path . 
+godot --path .
 ```
 
 ## 操作
@@ -18,49 +18,54 @@ godot --path .
 - `R`：重新开始
 - 球漏出底部会损失一颗球；底部计数是当前球数，`LOST` 是累计丢失数
 
-## 已实现内容
+## 玩法
 
-- 程序化迷宫砖块关卡，共 13 行彩色砖块
-- 多球机制：连击达到阈值时自动分裂新球
-- 砖块掉落道具：用挡板接住后立即生效
-  - `MULTI`：当前场上所有小球翻倍（上限 24 颗）
-  - `SPEED`：当前所有小球速度提升 18%（上限 980）
-  - 默认 14% 掉落率；连续 8 次未掉落时必定掉落，两种道具交替出现
-- 连击倍率、动态清除百分比、波次切换
-- `FIRE RUSH`：命中积累能量，满能量后进入 6 秒火焰冲刺
-  - 球变成火焰球并可穿透摧毁砖块
-  - 火焰粒子、余烬、橙色屏幕氛围
-  - 冲刺持续时间与能量条同步显示
-- 墙面/砖块/挡板的全自定义圆形与 AABB 碰撞
-- 霓虹光晕、拖尾、撞击粒子、屏幕震动、漂浮数字
-- 程序化合成音效，不依赖任何外部图片、字体或音频素材
+- 程序化迷宫砖块关卡与波次切换
+- 连击倍率、多球、动态清除百分比
+- `MULTI` 道具：所有小球翻倍，上限 24 颗
+- `SPEED` 道具：所有小球速度提升 18%，上限 980
+- 道具默认 14% 掉落率，连续 8 次未掉落触发保底
+- `FIRE RUSH`：命中充能，满能量后进入 6 秒穿透冲刺
+- 自定义圆形 / AABB 碰撞、固定物理步模拟
+- 霓虹拖尾、粒子、屏幕震动、漂浮文字与程序化音效
 
-## 代码入口
+## 项目结构
 
-- `main.tscn`：主场景
-- `scripts/main.gd`：全部玩法、碰撞、程序化绘制、UI 与音效逻辑
+```text
+main.tscn                       # 唯一主场景
+resources/
+├── game_config.tres            # 游戏数值、当前关卡与道具目录
+├── levels/labyrinth.tres       # 关卡布局
+└── powerups/                  # 道具定义
+scripts/
+├── main.gd                     # 组合根，只连接各模块
+├── core/                      # 世界状态、事件、输入、碰撞几何
+├── systems/                   # 碰撞与关卡生成
+├── model/                     # 类型化球、砖块、道具实体
+├── data/                      # 配置及道具效果接口
+└── presentation/              # 绘制、HUD、音效、粒子
+```
 
-几个方便继续调整的位置：
+核心 `GameWorld` 不依赖场景节点、绘制或音频，可以独立进行 headless 测试。玩法和视觉使用不同随机源，渲染帧数不会改变关卡或掉落结果。
 
-- 场地与挡板尺寸：`SCREEN_*`、`FIELD_*`、`PADDLE_*` 常量
-- 关卡密度：`BRICK_ROWS`、`BRICK_COLS`
-- 迷宫障碍：`create_walls()`
-- 难度与速度：`launch_ball()`、`collide_paddle()`
-- 火焰冲刺时长 / 充能速度：`start_fire_rush()`、`destroy_brick()`
-- 道具掉落率 / 上限：`POWERUP_DROP_CHANCE`、`POWERUP_MAX_BALLS`
-- 道具效果：`apply_multiball_powerup()`、`apply_speed_powerup()`
+详细设计和扩展方法见 [`docs/implementation.md`](docs/implementation.md)。
 
 ## 测试
 
 ```powershell
 godot --headless --path . --script res://tests/powerup_test.gd
+godot --headless --path . --script res://tests/world_test.gd
+godot --headless --path . --script res://tests/scene_smoke_test.gd
 ```
 
-测试会验证道具拾取、1 → 2 → 4 多球翻倍、速度提升，以及两类道具的掉落顺序。
+也可以运行全部测试：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run_tests.ps1 -Godot godot
+```
 
 ## 预览
 
 ![gameplay preview](preview.png)
 
 ![powerup preview](powerup_preview.png)
-
