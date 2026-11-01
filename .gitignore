@@ -3,3 +3,6 @@
 /android/
 
 /tools/godot/
+
+# 导出产物
+/build/
