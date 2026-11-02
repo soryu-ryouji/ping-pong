@@ -61,7 +61,7 @@ func update(delta: float, world: GameWorld) -> void:
                 var side := Vector2(-ball.velocity.y, ball.velocity.x).normalized()
                 emit_fire_ember(ball.position + side * rng.randf_range(-5.0, 5.0))
             if world.is_fire_active() or rng.randf() < 0.62:
-                emit_ball_spark(ball, world.is_fire_active())
+                emit_ball_spark(ball, world.is_fire_active(), world.ball_visual_color(ball.velocity.length()))
 
 
 func handle_event(event: GameEvent, world: GameWorld) -> void:
@@ -162,11 +162,11 @@ func emit_burst(position: Vector2, color: Color, count: int, speed: float, size:
         particles = particles.slice(particles.size() - 760)
 
 
-func emit_ball_spark(ball: BallData, fire: bool) -> void:
+func emit_ball_spark(ball: BallData, fire: bool, speed_color: Color) -> void:
     var direction := ball.velocity.normalized()
     var side := Vector2(-direction.y, direction.x)
     var life := rng.randf_range(0.16, 0.46)
-    var color := GOLD.lerp(PINK, rng.randf()) if fire else CYAN.lerp(PINK, rng.randf_range(0.0, 0.35))
+    var color := speed_color.lerp(PINK, rng.randf_range(0.15, 0.55)) if fire else speed_color.lerp(PINK, rng.randf_range(0.0, 0.28))
     particles.append({
         "pos": ball.position - direction * rng.randf_range(4.0, 12.0) + side * rng.randf_range(-4.0, 4.0),
         "vel": -direction * rng.randf_range(22.0, 90.0) + side * rng.randf_range(-34.0, 34.0),

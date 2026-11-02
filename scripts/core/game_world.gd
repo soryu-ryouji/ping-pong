@@ -8,6 +8,7 @@ const ORANGE := Color("#ff9b45")
 const PINK := Color("#ff8dd8")
 const GREEN := Color("#c9ff72")
 const DANGER := Color("#ff4d79")
+const BLUE := Color("#4da3ff")
 
 enum State { READY, PLAYING, CLEARED, GAME_OVER }
 
@@ -31,13 +32,10 @@ var xp_required := 150.0
 var xp_flash := 0.0
 var remaining_bricks := 0
 var total_bricks := 1
-var remaining_breakable_walls := 0
-var total_breakable_walls := 0
 var clear_fraction := 0.0
 var fire_energy := 0.0
 var fire_time := 0.0
 var respawn_timer := 0.0
-var state_timer := 0.0
 var game_time := 0.0
 
 var paddle_x := 360.0
@@ -83,7 +81,6 @@ func reset_run() -> void:
     fire_energy = 0.0
     fire_time = 0.0
     game_time = 0.0
-    state_timer = 0.0
     paddle_width = config.paddle_width
     paddle_flash = 0.0
     state = State.READY
@@ -101,8 +98,6 @@ func build_level() -> void:
         breakable_walls.clear()
         total_bricks = 1
         remaining_bricks = 0
-        remaining_breakable_walls = 0
-        total_breakable_walls = 0
         clear_fraction = 1.0
         return
     bricks = LevelGenerator.generate(definition, rng)
@@ -123,8 +118,6 @@ func build_level() -> void:
     for brick in bricks:
         if brick.alive:
             remaining_bricks += 1
-    total_breakable_walls = breakable_walls.size()
-    remaining_breakable_walls = total_breakable_walls
     _update_clear_fraction()
 
 
@@ -188,7 +181,6 @@ func _begin_level(debug_jump: bool) -> void:
     next_life_reward_at = config.combo_first_life_reward
     fire_energy = 0.0
     fire_time = 0.0
-    state_timer = 0.0
     build_level()
     reset_ball_state()
     state = State.READY
@@ -213,7 +205,7 @@ func primary_action() -> void:
     elif state == State.GAME_OVER:
         reset_run()
     elif state == State.CLEARED:
-        state_timer = 0.0
+        next_level()
 
 
 func step(delta: float) -> void:
@@ -239,9 +231,7 @@ func step(delta: float) -> void:
         update_powerups(delta)
         update_balls(delta)
     elif state == State.CLEARED:
-        state_timer -= delta
-        if state_timer <= 0.0:
-            next_level()
+        update_balls(delta, false)
 
     update_bricks(delta)
 
@@ -298,13 +288,15 @@ func boost_ball_speed(ball: BallData, amount: float) -> void:
     ball.velocity = ball.velocity.normalized() * target
 
 
-func update_balls(delta: float) -> void:
+func update_balls(delta: float, handle_loss := true) -> void:
     for index in range(balls.size() - 1, -1, -1):
         var ball := balls[index]
         var lost := collision.step(self, ball, delta)
         if lost:
             var lost_position := ball.position
             balls.remove_at(index)
+            if not handle_loss or state != State.PLAYING:
+                continue
             lost_count += 1
             combo = 0
             next_life_reward_at = config.combo_first_life_reward
@@ -388,7 +380,7 @@ func add_xp(amount: float) -> void:
             GOLD
         )
         event.value = xp_level
-        var reward_text := apply_level_up_reward(config.level_up_reward)
+        var reward_text := apply_level_up_reward(reward_for_level(xp_level))
         var label := "LEVEL UP"
         if not reward_text.is_empty():
             label += "  ·  " + reward_text
@@ -401,8 +393,15 @@ func add_xp(amount: float) -> void:
         )
 
 
+func reward_for_level(level: int) -> UpgradeReward:
+    if config.level_up_rewards.is_empty():
+        return null
+    var index := clampi(level - 2, 0, config.level_up_rewards.size() - 1)
+    return config.level_up_rewards[index]
+
+
 func apply_level_up_reward(reward: UpgradeReward = null) -> String:
-    var chosen := reward if reward != null else config.level_up_reward
+    var chosen := reward if reward != null else reward_for_level(xp_level)
     if chosen == null:
         return ""
     return chosen.apply(self)
@@ -518,7 +517,7 @@ func on_paddle_hit(hit_position: Vector2) -> void:
     add_xp(xp_gain_for_combo(combo))
     while combo >= next_life_reward_at:
         next_life_reward_at += config.combo_life_reward_interval
-        var reward_text := apply_level_up_reward(config.level_up_reward)
+        var reward_text := apply_level_up_reward(reward_for_level(xp_level))
         var reward_label := "COMBO REWARD"
         if not reward_text.is_empty():
             reward_label += "  ·  " + reward_text
@@ -537,10 +536,6 @@ func hit_breakable_wall(wall: BreakableWallData, ball_speed: float) -> bool:
     var center := wall.rect.get_center()
     if wall.hp <= 0:
         wall.alive = false
-        if breakable_walls.has(wall):
-            remaining_breakable_walls = maxi(0, remaining_breakable_walls - 1)
-            _update_clear_fraction()
-            _check_level_clear()
         var destroyed := emit_event(GameEvent.Type.BREAKABLE_WALL_DESTROYED, center, GOLD)
         destroyed.value = wall.max_hp
         add_message(center, "WALL BREAK", GOLD, 20, 0.9)
@@ -607,13 +602,11 @@ func start_fire_rush() -> void:
 
 
 func _update_clear_fraction() -> void:
-    var total := maxi(total_bricks + total_breakable_walls, 1)
-    var remaining := remaining_bricks + remaining_breakable_walls
-    clear_fraction = 1.0 - float(remaining) / float(total)
+    clear_fraction = 1.0 - float(remaining_bricks) / float(maxi(total_bricks, 1))
 
 
 func _check_level_clear() -> void:
-    if remaining_bricks <= 0 and remaining_breakable_walls <= 0:
+    if remaining_bricks <= 0:
         clear_level()
 
 
@@ -621,11 +614,38 @@ func clear_level() -> void:
     if state == State.CLEARED:
         return
     state = State.CLEARED
-    state_timer = 2.35
     clear_fraction = 1.0
     powerups.clear()
     emit_event(GameEvent.Type.LEVEL_CLEARED, Vector2(config.screen_size.x * 0.5, 330.0), GREEN)
     add_message(Vector2(config.screen_size.x * 0.5, 330.0), "LEVEL CLEAR", GREEN, 34, 1.5)
+
+
+func ball_speed_color(speed: float) -> Color:
+    var red_threshold := maxf(config.breakable_wall_min_speed, 1.0)
+    if speed >= red_threshold:
+        return DANGER
+    if speed >= red_threshold * 0.78:
+        return ORANGE
+    if speed >= red_threshold * 0.55:
+        return GOLD
+    return BLUE
+
+
+func ball_speed_intensity(speed: float) -> float:
+    var red_threshold := maxf(config.breakable_wall_min_speed, 1.0)
+    var span := maxf(config.max_ball_speed - red_threshold, 1.0)
+    return clampf((speed - red_threshold) / span, 0.0, 1.0)
+
+
+func ball_visual_scale(speed: float) -> float:
+    var red_threshold := maxf(config.breakable_wall_min_speed, 1.0)
+    var effective_speed := minf(speed, config.max_ball_speed)
+    var steps := maxf(0.0, effective_speed - red_threshold) / 100.0
+    return minf(1.0 + steps * 0.30, 2.5)
+
+
+func ball_visual_color(speed: float) -> Color:
+    return ball_speed_color(speed).lerp(Color.WHITE, ball_speed_intensity(speed) * 0.42)
 
 
 func paddle_max_width() -> float:

@@ -108,13 +108,9 @@ func update_view() -> void:
         GameWorld.State.GAME_OVER:
             show_status("GAME OVER", "CLICK / SPACE TO RESTART", PINK)
         GameWorld.State.CLEARED:
-            var next_hint := "NEXT LEVEL INCOMING"
+            var next_hint := "CLICK / SPACE TO CONTINUE"
             if world.is_last_level():
-                next_hint = "LOOPING TO LEVEL 01"
-            else:
-                var next_level := world.levels[world.next_level_index()]
-                if not next_level.display_name.is_empty():
-                    next_hint = "NEXT: " + next_level.display_name.to_upper()
+                next_hint = "CLICK / SPACE TO LOOP"
             show_status("LEVEL CLEAR", next_hint, GREEN)
         GameWorld.State.PLAYING:
             status_label.visible = false

@@ -62,7 +62,8 @@ func _draw() -> void:
 
     draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
     if world.state != GameWorld.State.PLAYING:
-        draw_rect(field_rect(), Color(0.0, 0.01, 0.03, 0.22), true)
+        var dim_alpha := 0.06 if world.state == GameWorld.State.CLEARED else 0.22
+        draw_rect(field_rect(), Color(0.0, 0.01, 0.03, dim_alpha), true)
     if effects.flash_alpha > 0.001:
         draw_rect(Rect2(Vector2.ZERO, config.screen_size), Color(0.55, 0.86, 1.0, effects.flash_alpha), true)
     draw_xp_meter()
@@ -287,15 +288,16 @@ func draw_trails() -> void:
         if ball.trail.size() < 2:
             continue
         var fire := world.is_fire_active()
+        var base_color := world.ball_visual_color(ball.velocity.length())
         for index in range(ball.trail.size() - 1):
             var ratio := float(index) / float(maxi(ball.trail.size() - 1, 1))
             var alpha := (0.18 + ratio * 0.82) * (1.0 if fire else 0.92)
             var width := 1.8 + ratio * (8.0 if fire else 6.5)
-            var color := GOLD if fire else CYAN
+            var color := base_color
             if not fire and index % 5 == 0:
-                color = PINK.lerp(CYAN, 0.25)
+                color = base_color.lightened(0.35)
             elif fire and index % 3 == 0:
-                color = PINK
+                color = ORANGE
             draw_line(ball.trail[index], ball.trail[index + 1], Color(color.r, color.g, color.b, alpha * 0.22), width * 3.3, true)
             draw_line(ball.trail[index], ball.trail[index + 1], Color(color.r, color.g, color.b, alpha), width, true)
             draw_line(ball.trail[index], ball.trail[index + 1], Color(1.0, 1.0, 1.0, alpha * 0.58), maxf(1.0, width * 0.24), true)
@@ -342,19 +344,24 @@ func draw_paddle() -> void:
 
 func draw_balls() -> void:
     if world.state == GameWorld.State.READY:
-        draw_ball_glow(Vector2(world.paddle_x, config.paddle_y - 28.0), 6.0, CYAN, 0.8)
+        draw_ball_glow(Vector2(world.paddle_x, config.paddle_y - 28.0), 6.0, world.ball_visual_color(config.base_ball_speed), 0.8)
         return
     for ball in world.balls:
         var fire := world.is_fire_active()
-        var color := GOLD if fire else CYAN
-        draw_ball_glow(ball.position, ball.radius, color, 1.0)
+        var speed := ball.velocity.length()
+        var intensity := world.ball_speed_intensity(speed)
+        var visual_radius := ball.radius * world.ball_visual_scale(speed)
+        var color := world.ball_visual_color(speed)
+        draw_ball_glow(ball.position, visual_radius, color, 1.0)
+        if intensity > 0.01:
+            draw_circle(ball.position, visual_radius * 2.4, Color(color.r, color.g, color.b, 0.08 * intensity))
         if fire:
-            draw_circle(ball.position, ball.radius + 3.0, Color(PINK.r, PINK.g, PINK.b, 0.35))
-        draw_circle(ball.position, ball.radius + 1.2, color)
-        draw_circle(ball.position, ball.radius, Color("#fff5dc") if fire else Color("#f6ffff"))
-        draw_circle(ball.position + Vector2(-1.5, -1.5), maxf(1.2, ball.radius * 0.34), Color.WHITE)
-        draw_line(ball.position + Vector2(-2, -12), ball.position + Vector2(-2, -7), Color(color.r, color.g, color.b, 0.65), 1.0, true)
-        draw_line(ball.position + Vector2(2, -12), ball.position + Vector2(2, -7), Color(color.r, color.g, color.b, 0.65), 1.0, true)
+            draw_circle(ball.position, visual_radius + 4.0, Color(ORANGE.r, ORANGE.g, ORANGE.b, 0.28))
+        draw_circle(ball.position, visual_radius + 1.2, color)
+        draw_circle(ball.position, visual_radius, Color.WHITE)
+        draw_circle(ball.position + Vector2(-1.5, -1.5), maxf(1.2, visual_radius * 0.34), Color.WHITE)
+        draw_line(ball.position + Vector2(-2, -visual_radius * 1.7), ball.position + Vector2(-2, -visual_radius * 1.0), Color(color.r, color.g, color.b, 0.65), 1.0, true)
+        draw_line(ball.position + Vector2(2, -visual_radius * 1.7), ball.position + Vector2(2, -visual_radius * 1.0), Color(color.r, color.g, color.b, 0.65), 1.0, true)
 
 
 func draw_ball_glow(position: Vector2, radius: float, color: Color, alpha: float) -> void:

@@ -1,8 +1,9 @@
-[gd_resource type="Resource" script_class="GameConfig" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="GameConfig" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/game_config.gd" id="1"]
 [ext_resource type="Resource" path="res://resources/powerup_catalog.tres" id="3"]
 [ext_resource type="Resource" path="res://resources/upgrades/extra_life.tres" id="4"]
+[ext_resource type="Resource" path="res://resources/upgrades/ball_split.tres" id="5"]
 
 [resource]
 script = ExtResource("1")
@@ -28,8 +29,8 @@ initial_lives = 5
 random_seed = 1592639710
 base_ball_speed = 470.0
 wave_speed_increment = 18.0
-bounce_speed_increment = 1.5
-max_ball_speed = 1410.0
+bounce_speed_increment = 7.0
+max_ball_speed = 5000.0
 maximum_launch_balls = 7
 combo_first_life_reward = 30
 combo_life_reward_interval = 35
@@ -48,5 +49,5 @@ fire_duration = 6.0
 fire_charge_per_hit = 3.4
 level_manifest = "res://resources/levels/levels.txt"
 debug_tools = true
-level_up_reward = ExtResource("4")
+level_up_rewards = Array[ExtResource("4")]([ExtResource("4"), ExtResource("5")])
 powerups = ExtResource("3")

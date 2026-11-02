@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BallSplitReward" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ball_split_reward.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ball_split"
+display_name = "Ball Split"
+description = "Split every active ball into two."
+color = Color(0.470588, 0.956863, 1, 1)

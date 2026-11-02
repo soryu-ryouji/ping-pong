@@ -77,7 +77,8 @@ func collide_paddle(world: Variant, ball: BallData) -> void:
         ball.velocity = new_velocity.normalized() * speed
     else:
         ball.velocity = Vector2(incoming_side * speed * 0.2, -speed * 0.98).normalized() * speed
-    world.on_paddle_hit(ball.position)
+    if world.state == GameWorld.State.PLAYING:
+        world.on_paddle_hit(ball.position)
 
 
 func collide_walls(world: Variant, ball: BallData) -> void:

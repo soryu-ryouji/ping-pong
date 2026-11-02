@@ -24,8 +24,8 @@ extends Resource
 @export var random_seed := 0x5EEDC0DE
 @export var base_ball_speed := 470.0
 @export var wave_speed_increment := 18.0
-@export var bounce_speed_increment := 1.5
-@export var max_ball_speed := 1410.0
+@export var bounce_speed_increment := 7.0
+@export var max_ball_speed := 5000.0
 @export var maximum_launch_balls := 7
 @export var combo_first_life_reward := 30
 @export var combo_life_reward_interval := 35
@@ -35,7 +35,7 @@ extends Resource
 @export var xp_combo_scale := 0.05
 @export var xp_required_base := 150.0
 @export var xp_required_growth := 1.4
-@export var level_up_reward: UpgradeReward
+@export var level_up_rewards: Array[UpgradeReward] = []
 
 @export_range(0.0, 1.0) var powerup_drop_chance := 0.14
 @export var powerup_pity_limit := 8
