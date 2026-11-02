@@ -81,9 +81,20 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 2. 把文件名加入 `resources/levels/levels.txt`。
 3. 运行 `tests/level_test.gd` 检查解析、砖块生成和墙体不重叠。
 
-完整格式、符号表和编关流程见 [levels.md](levels.md)。`GameWorld.build_level()` 每次从当前 `LevelDefinition` 生成砖块和墙；清关倒计时结束后 `next_level()` 推进 `level_index`，越过末尾时回到 `0` 并增加 `loop_count`。`wave` 是全局难度计数，持续增长并影响基础球速。
+完整格式、符号表和编关流程见 [levels.md](levels.md)。`LevelLoader` 会把 `X` / `=` 转成整格墙，把 `+` 按上下左右邻居拆成细墙段和连接段；`LevelGenerator` 只处理砖块符号。`GameWorld.build_level()` 每次从当前 `LevelDefinition` 生成砖块和墙；清关倒计时结束后 `next_level()` 推进 `level_index`，越过末尾时回到 `0` 并增加 `loop_count`。`wave` 是全局难度计数，持续增长并影响基础球速。
 
 若需要完全不同的生成算法，可以替换 `LevelGenerator`，或在 `LevelDefinition` 中增加字段，而不必修改碰撞或表现模块。
+
+### 开发者跳关
+
+`GameConfig.debug_tools` 打开时，`PlayerInputController` 会接管以下快捷键：
+
+- `[` / `PageUp`：`GameWorld.previous_level_debug()`
+- `]` / `PageDown`：`GameWorld.next_level_debug()`
+- `1`-`9`：`GameWorld.jump_to_level(index)`
+- `Shift+R`：`GameWorld.restart_level_debug()`
+
+跳关统一走 `_begin_level()`：重建砖块和墙、清空球与道具、重置 FIRE/COMBO、回到 `READY`。`jump_to_level()` 按 `loop_count` 和关卡索引重新计算 `wave`，避免跳回低关时球速和 HUD 不一致。发布配置应将 `debug_tools` 关闭。
 
 ## 5. 模拟与事件
 
@@ -120,7 +131,7 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 
 - `tests/powerup_test.gd`：道具拾取、1 → 2 → 4 多球、速度提升、保底和掉落顺序。
 - `tests/level_test.gd`：关卡清单、文本解析、符号配色、墙体与砖块生成。
-- `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时和关卡循环。
+- `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时、关卡循环和开发者跳关。
 - `tests/scene_smoke_test.gd`：主场景组合、模块创建和发射流程。
 - `tests/powerup_preview.gd`：生成道具预览图。
 
