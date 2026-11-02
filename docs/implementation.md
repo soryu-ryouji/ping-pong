@@ -36,11 +36,15 @@ GameRenderer       GameEffects   GameAudioManager
 - `level_manifest`：关卡顺序清单，默认 `res://resources/levels/levels.txt`。
 - `powerups`：当前 `PowerupCatalog`。
 
-与关卡布局相关的字段还有 `brick_area_margin`、`brick_area_max_height` 和 `brick_area_bottom`，分别控制 fit 模式的左右留白、砖块区最大高度，以及 fill 模式的底部边界。
+与关卡布局相关的字段还有 `brick_area_margin`、`brick_area_max_height` 和 `brick_area_bottom`，分别控制 fit 模式的左右留白、砖块区最大高度，以及 fill 模式的底部边界。挡板成长由 `paddle_grow_per_hit` 控制，当前为每次 `+10px`；`GameWorld.paddle_max_width()` 取当前关卡 `brick_wall_width()`，所以挡板不会超过砖墙宽度。挡板的颜色升级按“基础宽度以上的增长量”计算，`paddle_flash` 驱动升级闪光；球掉落时 `_shrink_paddle_after_loss()` 会把额外宽度削减到原来的 `1/3`。
+
+挡板移动由 `paddle_move_speed()` 控制：按当前扩展量在 `paddle_base_move_speed` 和 `paddle_min_move_speed` 之间插值，`update_paddle()` 用限速移动代替固定插值，所以变宽后更考验预判，缩回后速度恢复。
+
+小球每次墙面、障碍或砖块反弹都会调用 `boost_ball_speed()`，增加 `bounce_speed_increment`，并统一受 `max_ball_speed = 1410`（初始速度的 3 倍）限制；发球和 SPEED 道具也使用同一个上限。
 
 关卡布局保存在 `resources/levels/*.txt`，格式见 [levels.md](levels.md)。`GameWorld` 启动时用 `LevelLoader` 读取清单，运行时保存 `levels: Array[LevelDefinition]`、`level_index` 和 `loop_count`。
 
-实体采用 `BallData`、`BrickData`、`PowerupData`，不再依赖字符串键字典。游戏状态使用 `GameWorld.State` 枚举。
+实体采用 `BallData`、`BrickData`、`PowerupData`，不再依赖字符串键字典。`BrickData` 额外保存 `hp` / `max_hp` / `shake`；挡板当前宽度由 `GameWorld.paddle_width` 维护，不再直接读取配置值。游戏状态使用 `GameWorld.State` 枚举。
 
 ## 3. 新增道具
 
@@ -83,7 +87,11 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 2. 把文件名加入 `resources/levels/levels.txt`。
 3. 运行 `tests/level_test.gd` 检查解析、砖块生成和墙体不重叠。
 
-完整格式、符号表和编关流程见 [levels.md](levels.md)。`LevelLoader` 会先根据网格列数、砖块行数和 `GameConfig` 的可用区域做自动布局：默认 fit 模式按需统一缩放并水平居中；关卡写 `fill_field = true` 时改为按列数/总行数铺满可用区域；`auto_layout = false` 时保留手动 `origin` / `brick_size` / `step`。然后再把 `X` / `=` 转成整格墙，把 `+` 按上下左右邻居拆成细墙段和连接段。`LevelGenerator` 只处理砖块符号。`GameWorld.build_level()` 每次从当前 `LevelDefinition` 生成砖块和墙；清关倒计时结束后 `next_level()` 推进 `level_index`，越过末尾时回到 `0` 并增加 `loop_count`。`wave` 是全局难度计数，持续增长并影响基础球速。
+完整格式、符号表和编关流程见 [levels.md](levels.md)。`LevelLoader` 会先根据网格列数、砖块行数和 `GameConfig` 的可用区域做自动布局：默认 fit 模式按需统一缩放并水平居中；关卡写 `fill_field = true` 时改为按列数/总行数铺满可用区域；`auto_layout = false` 时保留手动 `origin` / `brick_size` / `step`。然后再把 `X` / `=` 转成整格墙，把 `+` 按上下左右邻居拆成细墙段和连接段。`LevelGenerator` 只处理砖块符号，并从 `LevelDefinition.brick_hp` 设置每个砖块的 `hp` / `max_hp`。
+
+`GameWorld.build_level()` 每次从当前 `LevelDefinition` 生成砖块和墙；清关倒计时结束后 `next_level()` 推进 `level_index`，越过末尾时回到 `0` 并增加 `loop_count`。`wave` 是全局难度计数，持续增长并影响基础球速。
+
+碰撞到多段耐久砖时，`CollisionSystem` 调用 `GameWorld.hit_brick()`。未击碎时砖块进入 `shake` 状态并发出 `BRICK_HIT`；击碎时才进入 `destroy_brick()`，结算 COMBO、FIRE 和道具。FIRE RUSH 传入高伤害，直接击碎。
 
 若需要完全不同的生成算法，可以替换 `LevelGenerator`，或在 `LevelDefinition` 中增加字段，而不必修改碰撞或表现模块。
 
@@ -107,13 +115,13 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 3. `CLEARED` 下更新关卡切换倒计时。
 4. 更新砖块闪光状态。
 
-球按速度动态拆分子步，每步最多移动约 4.5 像素，依次处理外墙、丢球、挡板、迷宫墙和砖块。`CollisionGeometry.circle_rect_hit()` 返回 `CollisionHit` 或 `null`，包含法线和穿透深度。
+球按速度动态拆分子步，每步最多移动约 4.5 像素，依次处理外墙、丢球、挡板、迷宫墙和砖块。`CollisionGeometry.circle_rect_hit()` 返回 `CollisionHit` 或 `null`，包含法线和穿透深度。墙和砖块碰撞都会把球推出穿透区域（FIRE RUSH 穿透砖块时除外），避免球卡在实体内部；`update_balls()` 还跟踪每个球的位置变化，连续约 1.5 秒没有明显位移时会执行 `BALL RESCUE`，把球放回挡板上方并给一个向上初速度。
 
 世界通过 `drain_events()` 一次性交付事件。主要事件包括：
 
 - `BALL_LAUNCHED` / `BALL_LOST` / `BALL_SPLIT`
 - `WALL_HIT` / `OBSTACLE_HIT` / `PADDLE_HIT`
-- `BRICK_DESTROYED` / `POWERUP_DROPPED` / `POWERUP_COLLECTED`
+- `BRICK_HIT` / `BRICK_DESTROYED` / `POWERUP_DROPPED` / `POWERUP_COLLECTED`
 - `FIRE_STARTED` / `FIRE_ENDED`
 - `LEVEL_CLEARED` / `LEVEL_STARTED` / `GAME_OVER` / `RUN_RESET`
 - `MESSAGE` / `COMBO_POP`
@@ -132,8 +140,8 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 ## 7. 测试
 
 - `tests/powerup_test.gd`：道具拾取、1 → 2 → 4 多球、速度提升、保底和掉落顺序。
-- `tests/level_test.gd`：关卡清单、文本解析、符号配色、自动布局、墙体与砖块生成。
-- `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时、关卡循环和开发者跳关。
+- `tests/level_test.gd`：关卡清单、文本解析、符号配色、多段耐久、自动布局、墙体与砖块生成。
+- `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时、关卡循环、开发者跳关、挡板成长/收缩与移动速度、反弹加速上限、卡球救援和多段耐久砖。
 - `tests/scene_smoke_test.gd`：主场景组合、模块创建和发射流程。
 - `tests/powerup_preview.gd`：生成道具预览图。
 
