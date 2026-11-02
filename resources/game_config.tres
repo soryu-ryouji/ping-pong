@@ -32,4 +32,5 @@ fire_drop_chance_multiplier = 0.72
 fire_duration = 6.0
 fire_charge_per_hit = 3.4
 level_manifest = "res://resources/levels/levels.txt"
+debug_tools = true
 powerups = ExtResource("3")

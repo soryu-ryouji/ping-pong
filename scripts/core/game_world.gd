@@ -101,12 +101,8 @@ func reset_ball_state() -> void:
     respawn_timer = 0.0
 
 
-func next_level() -> void:
+func next_level(debug_jump := false) -> void:
     wave += 1
-    combo = 0
-    next_multiball_at = config.combo_first_multiball
-    fire_energy = 0.0
-    fire_time = 0.0
     if levels.is_empty():
         state = State.READY
         return
@@ -114,6 +110,49 @@ func next_level() -> void:
     if level_index >= levels.size():
         level_index = 0
         loop_count += 1
+    _begin_level(debug_jump)
+
+
+func jump_to_level(target_index: int) -> void:
+    if levels.is_empty() or not config.debug_tools:
+        return
+    level_index = clampi(target_index, 0, levels.size() - 1)
+    wave = (loop_count - 1) * levels.size() + level_index + 1
+    _begin_level(true)
+
+
+func previous_level_debug() -> void:
+    if levels.is_empty() or not config.debug_tools:
+        return
+    if level_index == 0:
+        level_index = levels.size() - 1
+        loop_count = maxi(1, loop_count - 1)
+    else:
+        level_index -= 1
+    wave = (loop_count - 1) * levels.size() + level_index + 1
+    _begin_level(true)
+
+
+func next_level_debug() -> void:
+    if levels.is_empty() or not config.debug_tools:
+        return
+    next_level(true)
+
+
+func restart_level_debug() -> void:
+    if levels.is_empty() or not config.debug_tools:
+        return
+    _begin_level(true)
+
+
+func _begin_level(debug_jump: bool) -> void:
+    if debug_jump and state == State.GAME_OVER:
+        lives = config.initial_lives
+    combo = 0
+    next_multiball_at = config.combo_first_multiball
+    fire_energy = 0.0
+    fire_time = 0.0
+    state_timer = 0.0
     build_level()
     reset_ball_state()
     state = State.READY
@@ -124,6 +163,8 @@ func next_level() -> void:
     if definition != null and not definition.display_name.is_empty():
         title += "  " + definition.display_name.to_upper()
     add_message(event.position, title, CYAN, 26, 1.2)
+    if debug_jump:
+        add_message(event.position + Vector2(0.0, -34.0), "DEBUG JUMP", ORANGE, 16, 1.0)
     if level_index == 0 and loop_count > 1:
         add_message(event.position + Vector2(0.0, 34.0), "LOOP %02d" % loop_count, GOLD, 18, 1.4)
 

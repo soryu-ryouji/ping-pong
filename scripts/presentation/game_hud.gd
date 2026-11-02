@@ -20,6 +20,7 @@ var fire_label: Label
 var status_label: Label
 var status_hint: Label
 var footer_hint: Label
+var debug_label: Label
 
 
 func setup(game_world: GameWorld, game_effects: GameEffects) -> void:
@@ -34,9 +35,10 @@ func setup(game_world: GameWorld, game_effects: GameEffects) -> void:
     lost_label = make_label("LOST 0", Vector2(270, 866), Vector2(180, 22), 14, Color("#d083ab"), HORIZONTAL_ALIGNMENT_CENTER)
     fire_label = make_label("FIRE CHARGE 0%", Vector2(460, 860), Vector2(230, 26), 17, GOLD, HORIZONTAL_ALIGNMENT_RIGHT)
     footer_hint = make_label("MOUSE / TOUCH / A D  ·  SPACE TO LAUNCH  ·  R TO RESTART", Vector2(23, 892), Vector2(674, 20), 11, Color("#506a80"), HORIZONTAL_ALIGNMENT_CENTER)
+    debug_label = make_label("DEBUG  [ ] PREV/NEXT  ·  1-9 JUMP  ·  SHIFT+R RESTART LEVEL", Vector2(23, 838), Vector2(674, 18), 11, ORANGE, HORIZONTAL_ALIGNMENT_LEFT)
     status_label = make_label("", Vector2(100, 364), Vector2(520, 64), 30, GOLD, HORIZONTAL_ALIGNMENT_CENTER)
     status_hint = make_label("", Vector2(100, 425), Vector2(520, 30), 14, Color("#9ab0c2"), HORIZONTAL_ALIGNMENT_CENTER)
-    for label in [wave_label, title_label, combo_header, combo_label, clear_label, balls_label, lost_label, fire_label, status_label, status_hint, footer_hint]:
+    for label in [wave_label, title_label, combo_header, combo_label, clear_label, balls_label, lost_label, fire_label, status_label, status_hint, footer_hint, debug_label]:
         label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     update_view()
 
@@ -67,6 +69,7 @@ func update_view() -> void:
     else:
         title_label.text = "LABYRINTH / RICOCHET"
     combo_label.text = "×%d" % world.combo
+    debug_label.visible = world.config.debug_tools
     clear_label.text = "%d%% CLEAR" % int(round(world.clear_fraction * 100.0))
     balls_label.text = "%02d BALLS" % maxi(1, world.balls.size()) if world.state == GameWorld.State.READY else "%02d BALLS" % world.balls.size()
     lost_label.text = "LOST %d" % world.lost_count

@@ -8,6 +8,7 @@ func _initialize() -> void:
     test_deterministic_simulation()
     test_wave_and_fire_state()
     test_level_cycle()
+    test_debug_level_navigation()
     quit(1 if failures > 0 else 0)
 
 
@@ -74,6 +75,63 @@ func test_level_cycle() -> void:
 
     check(world.loop_count == 2, "Completing the last level should increment the loop count")
     check(world.current_level() != null, "Loop should return to a valid level")
+
+
+func test_debug_level_navigation() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    var level_count := world.levels.size()
+    check(config.debug_tools, "Debug tools should be enabled in the dev config")
+    check(level_count >= 1, "Expected at least one loaded level")
+    if level_count < 1:
+        return
+
+    var target := mini(2, level_count - 1)
+    world.jump_to_level(target)
+    check(world.level_index == target, "Debug jump did not select the target level")
+    check(world.wave == target + 1, "Debug jump did not set the wave counter")
+    check(world.state == GameWorld.State.READY, "Debug jump should return to READY")
+    check(world.balls.is_empty(), "Debug jump should clear active balls")
+
+    if level_count > 1:
+        world.previous_level_debug()
+        var previous := (target - 1 + level_count) % level_count
+        check(world.level_index == previous, "Debug previous level did not wrap correctly")
+        check(world.wave == previous + 1, "Debug previous level did not update the wave counter")
+
+    var input := PlayerInputController.new()
+    var jump_key := InputEventKey.new()
+    jump_key.pressed = true
+    var key_target := mini(1, level_count - 1)
+    jump_key.keycode = KEY_1 + key_target
+    input.handle_event(jump_key, world)
+    check(world.level_index == key_target, "Number key did not jump to the expected level")
+
+    var next_key := InputEventKey.new()
+    next_key.pressed = true
+    next_key.keycode = KEY_BRACKETRIGHT
+    input.handle_event(next_key, world)
+    check(
+        world.level_index == (key_target + 1) % level_count,
+        "Right bracket did not advance the level"
+    )
+
+    var previous_key := InputEventKey.new()
+    previous_key.pressed = true
+    previous_key.keycode = KEY_BRACKETLEFT
+    input.handle_event(previous_key, world)
+    check(world.level_index == key_target, "Left bracket did not return to the previous level")
+
+    world.state = GameWorld.State.PLAYING
+    world.launch_ball(false)
+    var restart_key := InputEventKey.new()
+    restart_key.pressed = true
+    restart_key.keycode = KEY_R
+    restart_key.shift_pressed = true
+    input.handle_event(restart_key, world)
+    check(world.state == GameWorld.State.READY, "Shift+R should restart the current level")
+    check(world.balls.is_empty(), "Shift+R should clear active balls")
 
 
 func check(condition: bool, message: String) -> void:

@@ -31,4 +31,5 @@ extends Resource
 @export var fire_charge_per_hit := 3.4
 
 @export_file("*.txt") var level_manifest := "res://resources/levels/levels.txt"
+@export var debug_tools := false
 @export var powerups: PowerupCatalog

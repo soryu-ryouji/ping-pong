@@ -23,4 +23,16 @@ func handle_event(event: InputEvent, world: GameWorld) -> void:
         if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
             world.primary_action()
         elif event.keycode == KEY_R:
-            world.reset_run()
+            if world.config.debug_tools and event.shift_pressed:
+                world.restart_level_debug()
+            else:
+                world.reset_run()
+        elif world.config.debug_tools:
+            if event.keycode == KEY_BRACKETLEFT or event.keycode == KEY_PAGEUP:
+                world.previous_level_debug()
+            elif event.keycode == KEY_BRACKETRIGHT or event.keycode == KEY_PAGEDOWN:
+                world.next_level_debug()
+            elif event.keycode >= KEY_1 and event.keycode <= KEY_9:
+                var target_index: int = event.keycode - KEY_1
+                if target_index < world.levels.size():
+                    world.jump_to_level(target_index)
