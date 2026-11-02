@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $tests = @(
     "res://tests/powerup_test.gd",
+    "res://tests/level_test.gd",
     "res://tests/world_test.gd",
     "res://tests/scene_smoke_test.gd"
 )

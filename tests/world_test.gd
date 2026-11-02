@@ -7,6 +7,7 @@ func _initialize() -> void:
     test_geometry()
     test_deterministic_simulation()
     test_wave_and_fire_state()
+    test_level_cycle()
     quit(1 if failures > 0 else 0)
 
 
@@ -49,6 +50,30 @@ func test_wave_and_fire_state() -> void:
     world.step(config.fire_duration + 0.01)
     check(not world.is_fire_active(), "Fire rush should expire")
     check(world.fire_energy == 0.0, "Fire energy should reset after rush")
+
+
+func test_level_cycle() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    var level_count := world.levels.size()
+    check(level_count >= 1, "Expected at least one loaded level")
+    check(world.level_index == 0, "Run should start on the first level")
+    check(world.loop_count == 1, "Run should start on loop 1")
+    if level_count < 1:
+        return
+
+    for step_index in range(level_count):
+        world.clear_level()
+        world.step(3.0)
+        check(
+            world.level_index == (step_index + 1) % level_count,
+            "Unexpected level index after clear"
+        )
+        check(world.wave == step_index + 2, "Wave counter did not advance")
+
+    check(world.loop_count == 2, "Completing the last level should increment the loop count")
+    check(world.current_level() != null, "Loop should return to a valid level")
 
 
 func check(condition: bool, message: String) -> void:
