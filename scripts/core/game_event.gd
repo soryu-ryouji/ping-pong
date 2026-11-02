@@ -15,6 +15,7 @@ enum Type {
     FIRE_ENDED,
     LEVEL_CLEARED,
     LEVEL_STARTED,
+    XP_LEVEL_UP,
     GAME_OVER,
     MESSAGE,
     OBSTACLE_HIT,

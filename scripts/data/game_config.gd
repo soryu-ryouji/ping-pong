@@ -29,6 +29,10 @@ extends Resource
 @export var combo_multiball_limit := 6
 @export var combo_first_multiball := 30
 @export var combo_multiball_interval := 35
+@export var xp_base_gain := 1.0
+@export var xp_combo_scale := 0.05
+@export var xp_required_base := 150.0
+@export var xp_required_growth := 1.4
 
 @export_range(0.0, 1.0) var powerup_drop_chance := 0.14
 @export var powerup_pity_limit := 8

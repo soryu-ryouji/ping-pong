@@ -119,6 +119,11 @@ func handle_event(event: GameEvent, world: GameWorld) -> void:
             shake = maxf(shake, 6.0)
         GameEvent.Type.LEVEL_STARTED:
             flash_alpha = maxf(flash_alpha, 0.18)
+        GameEvent.Type.XP_LEVEL_UP:
+            flash_alpha = maxf(flash_alpha, 0.12)
+            shake = maxf(shake, 3.5)
+            combo_pop = 1.0
+            emit_burst(event.position, GOLD, 26, 190.0, 3.2, 120.0)
         GameEvent.Type.MESSAGE:
             add_floater(event.position, event.text, event.color, event.size, event.lifetime)
         GameEvent.Type.OBSTACLE_HIT:

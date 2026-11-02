@@ -64,6 +64,7 @@ func _draw() -> void:
         draw_rect(field_rect(), Color(0.0, 0.01, 0.03, 0.22), true)
     if effects.flash_alpha > 0.001:
         draw_rect(Rect2(Vector2.ZERO, config.screen_size), Color(0.55, 0.86, 1.0, effects.flash_alpha), true)
+    draw_xp_meter()
 
 
 func field_rect() -> Rect2:
@@ -331,6 +332,21 @@ func draw_floaters() -> void:
             floater["size"],
             Color(color.r, color.g, color.b, alpha)
         )
+
+
+func draw_xp_meter() -> void:
+    var meter_rect := Rect2(24.0, 844.0, 672.0, 6.0)
+    draw_rect(meter_rect, Color(0.07, 0.11, 0.17, 0.95), true)
+    var fill := clampf(world.xp / maxf(world.xp_required, 1.0), 0.0, 1.0)
+    var fill_color := GOLD if world.xp_flash > 0.01 else CYAN
+    draw_rect(Rect2(meter_rect.position, Vector2(meter_rect.size.x * fill, meter_rect.size.y)), fill_color, true)
+    draw_line(Vector2(meter_rect.position.x, meter_rect.position.y - 1.0), Vector2(meter_rect.end.x, meter_rect.position.y - 1.0), Color(0.6, 0.9, 1.0, 0.08), 1.0)
+    for index in range(1, 10):
+        var x := meter_rect.position.x + meter_rect.size.x * float(index) / 10.0
+        draw_line(Vector2(x, meter_rect.position.y), Vector2(x, meter_rect.end.y), Color(0.0, 0.0, 0.0, 0.35), 1.0)
+    if world.xp_flash > 0.01:
+        var pulse := world.xp_flash
+        draw_rect(meter_rect.grow(4.0 + (1.0 - pulse) * 14.0), Color(1.0, 0.85, 0.4, 0.55 * pulse), false, 2.0)
 
 
 func draw_bottom_meter() -> void:

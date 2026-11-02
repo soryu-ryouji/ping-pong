@@ -25,6 +25,10 @@ var lives := 5
 var lost_count := 0
 var combo := 0
 var next_multiball_at := 30
+var xp := 0.0
+var xp_level := 1
+var xp_required := 150.0
+var xp_flash := 0.0
 var remaining_bricks := 0
 var total_bricks := 1
 var clear_fraction := 0.0
@@ -52,6 +56,9 @@ func _init(game_config: GameConfig) -> void:
     rng.seed = config.random_seed
     paddle_width = config.paddle_width
     paddle_flash = 0.0
+    xp_level = 1
+    xp_required = maxf(config.xp_required_base, 1.0)
+    xp_flash = 0.0
     levels = LevelLoader.load_manifest(config.level_manifest, config)
 
 
@@ -64,6 +71,10 @@ func reset_run() -> void:
     lost_count = 0
     combo = 0
     next_multiball_at = config.combo_first_multiball
+    xp = 0.0
+    xp_level = 1
+    xp_required = maxf(config.xp_required_base, 1.0)
+    xp_flash = 0.0
     powerup_pity = 0
     powerup_drop_counter = 0
     fire_energy = 0.0
@@ -192,6 +203,7 @@ func primary_action() -> void:
 func step(delta: float) -> void:
     game_time += delta
     paddle_flash = maxf(0.0, paddle_flash - delta * 3.0)
+    xp_flash = maxf(0.0, xp_flash - delta * 2.0)
     update_paddle(delta)
 
     if state == State.PLAYING:
@@ -340,6 +352,57 @@ func _shrink_paddle_after_loss() -> void:
     )
 
 
+func xp_gain_for_combo(combo_value: int) -> float:
+    return config.xp_base_gain + float(maxi(combo_value, 0)) * config.xp_combo_scale
+
+
+func add_xp(amount: float) -> void:
+    if amount <= 0.0:
+        return
+    xp += amount
+    while xp >= xp_required:
+        xp -= xp_required
+        xp_level += 1
+        xp_required = maxf(1.0, xp_required * maxf(config.xp_required_growth, 1.0))
+        xp_flash = 1.0
+        var event := emit_event(
+            GameEvent.Type.XP_LEVEL_UP,
+            Vector2(config.screen_size.x * 0.5, config.field_bottom - 8.0),
+            GOLD
+        )
+        event.value = xp_level
+        var added := double_balls(GOLD)
+        var label := "LEVEL UP  ·  BALLS ×2" if added > 0 else "LEVEL UP"
+        add_message(
+            Vector2(config.screen_size.x * 0.5, config.field_bottom - 60.0),
+            label,
+            GOLD,
+            28,
+            1.2
+        )
+
+
+func double_balls(event_color: Color = CYAN) -> int:
+    if balls.is_empty():
+        return 0
+    var originals: Array = balls.duplicate()
+    var added := 0
+    for source: BallData in originals:
+        if balls.size() >= config.powerup_max_balls:
+            break
+        var offset := Vector2(
+            rng.randf_range(-7.0, 7.0),
+            rng.randf_range(-7.0, 7.0)
+        )
+        var direction := 1.0 if rng.randf() > 0.5 else -1.0
+        var split_angle := rng.randf_range(0.38, 0.72) * direction
+        var copy := source.copy_for_split(offset, split_angle, rng.randf_range(-1.0, 1.0))
+        balls.append(copy)
+        emit_event(GameEvent.Type.BALL_SPLIT, copy.position, event_color)
+        added += 1
+    return added
+
+
 func try_drop_powerup(center: Vector2, fire: bool) -> void:
     if powerups.size() >= config.powerup_max_active:
         return
@@ -424,6 +487,14 @@ func on_paddle_hit(hit_position: Vector2) -> void:
         label = "WIDTH MAX"
     add_message(hit_position + Vector2(0.0, -20.0), label, CYAN_SOFT, 13, 0.42)
 
+    combo += 1
+    notify_combo_pop()
+    add_xp(xp_gain_for_combo(combo))
+    while combo >= next_multiball_at and balls.size() < config.combo_multiball_limit:
+        next_multiball_at += config.combo_multiball_interval
+        launch_ball(true)
+        add_message(Vector2(paddle_x, config.paddle_y - 58.0), "MULTIBALL", CYAN, 18, 0.8)
+
 
 func hit_brick(brick: BrickData, damage := 1) -> bool:
     if not brick.alive:
@@ -451,24 +522,16 @@ func destroy_brick(brick: BrickData) -> void:
     var center := brick.rect.get_center()
     var fire := is_fire_active()
     var gain := 2 if fire else 1
-    combo += gain
 
     var event := emit_event(GameEvent.Type.BRICK_DESTROYED, center, brick.color)
     event.value = gain
     add_message(center, "+%d" % gain, brick.color.lightened(0.35), 14, 0.45)
-    if combo > 0 and combo % 10 == 0:
-        add_message(center + Vector2(0.0, -18.0), "×%d" % combo, GOLD, 20, 0.70)
 
     if fire:
         fire_energy = 100.0
     else:
         fire_energy = minf(100.0, fire_energy + config.fire_charge_per_hit)
     try_drop_powerup(center, fire)
-
-    while combo >= next_multiball_at and balls.size() < config.combo_multiball_limit:
-        next_multiball_at += config.combo_multiball_interval
-        launch_ball(true)
-        add_message(Vector2(paddle_x, config.paddle_y - 58.0), "MULTIBALL", CYAN, 18, 0.8)
 
     if fire_energy >= 100.0 and not fire:
         start_fire_rush()
@@ -494,10 +557,8 @@ func clear_level() -> void:
     state_timer = 2.35
     clear_fraction = 1.0
     powerups.clear()
-    combo += 25
     emit_event(GameEvent.Type.LEVEL_CLEARED, Vector2(config.screen_size.x * 0.5, 330.0), GREEN)
     add_message(Vector2(config.screen_size.x * 0.5, 330.0), "LEVEL CLEAR", GREEN, 34, 1.5)
-    add_message(Vector2(config.screen_size.x * 0.5, 376.0), "+25 BONUS", GOLD, 20, 1.4)
 
 
 func paddle_max_width() -> float:
