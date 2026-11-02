@@ -29,6 +29,8 @@ extends Resource
 @export var combo_multiball_limit := 6
 @export var combo_first_multiball := 30
 @export var combo_multiball_interval := 35
+@export var breakable_wall_hp := 99
+@export var breakable_wall_min_speed := 900.0
 @export var xp_base_gain := 1.0
 @export var xp_combo_scale := 0.05
 @export var xp_required_base := 150.0

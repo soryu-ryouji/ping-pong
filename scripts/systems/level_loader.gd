@@ -49,6 +49,7 @@ static func load_definition(path: String, config: GameConfig = null) -> LevelDef
     var grid_lines: PackedStringArray = []
     var symbol_colors := {}
     var walls: Array[Rect2] = []
+    var breakable_walls: Array[Rect2] = []
     var thin_cells := {}
     var brick_symbols := 0
     var in_grid := false
@@ -102,8 +103,11 @@ static func load_definition(path: String, config: GameConfig = null) -> LevelDef
                 ))
             elif symbol == "+":
                 thin_cells[Vector2i(column, row)] = true
-    _append_thin_walls(definition, thin_cells, walls)
+    _append_thin_walls(definition, thin_cells, breakable_walls)
     definition.walls = walls
+    definition.breakable_walls = breakable_walls
+    var blockers: Array[Rect2] = walls.duplicate()
+    blockers.append_array(breakable_walls)
 
     var playable_bricks := 0
     for row in range(definition.rows):
@@ -116,7 +120,7 @@ static func load_definition(path: String, config: GameConfig = null) -> LevelDef
                 definition.brick_origin + Vector2(column, row) * definition.brick_step,
                 definition.brick_size
             )
-            if not _intersects_wall(rect, walls):
+            if not _intersects_wall(rect, blockers):
                 playable_bricks += 1
     if brick_symbols == 0:
         push_error("Level has no brick symbols: %s" % path)

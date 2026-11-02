@@ -38,6 +38,7 @@ const LOWER_END := 122
 @export var symbol_colors: Dictionary = {}
 @export var brick_hp: Dictionary = {}
 @export var walls: Array[Rect2] = []
+@export var breakable_walls: Array[Rect2] = []
 
 
 func brick_wall_width() -> float:

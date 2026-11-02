@@ -32,6 +32,7 @@ func step(world: Variant, ball: BallData, delta: float) -> bool:
 
         collide_paddle(world, ball)
         collide_walls(world, ball)
+        collide_breakable_walls(world, ball)
         collide_bricks(world, ball)
 
         if absf(ball.velocity.y) < 92.0 and ball.velocity.length_squared() > 1.0:
@@ -57,7 +58,10 @@ func collide_paddle(world: Variant, ball: BallData) -> void:
 
     ball.position.y = paddle_rect.position.y - ball.radius - 0.2
     var relative := clampf((ball.position.x - world.paddle_x) / (world.paddle_width * 0.5), -1.0, 1.0)
-    var speed := clampf(ball.velocity.length() + 7.0, 470.0, config.max_ball_speed)
+    var incoming_speed := ball.velocity.length()
+    var speed := maxf(incoming_speed + 7.0, 470.0)
+    if incoming_speed <= config.max_ball_speed:
+        speed = minf(speed, config.max_ball_speed)
     var angle := relative * 1.02
     var new_velocity := Vector2(sin(angle), -cos(angle)) * speed
     new_velocity.x += clampf(world.paddle_velocity * 0.10, -110.0, 110.0)
@@ -88,6 +92,25 @@ func collide_walls(world: Variant, ball: BallData) -> void:
             world.boost_ball_speed(ball, config.bounce_speed_increment)
             world.emit_event(GameEvent.Type.OBSTACLE_HIT, ball.position + hit.normal * 3.0, Color("#a9c4d8"))
         break
+
+
+func collide_breakable_walls(world: Variant, ball: BallData) -> bool:
+    var config: GameConfig = world.config
+    for wall: BreakableWallData in world.breakable_walls:
+        if not wall.alive:
+            continue
+        var hit := CollisionGeometry.circle_rect_hit(ball.position, ball.radius, wall.rect)
+        if hit == null:
+            continue
+        var hit_speed := ball.velocity.length()
+        ball.position += hit.normal * hit.penetration
+        if ball.velocity.dot(hit.normal) < 0.0:
+            ball.velocity = ball.velocity.bounce(hit.normal)
+            world.boost_ball_speed(ball, config.bounce_speed_increment)
+            world.emit_event(GameEvent.Type.OBSTACLE_HIT, ball.position + hit.normal * 3.0, Color("#ffb45e"))
+        world.hit_breakable_wall(wall, hit_speed)
+        return true
+    return false
 
 
 func collide_bricks(world: Variant, ball: BallData) -> bool:

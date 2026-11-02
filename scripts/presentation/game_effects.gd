@@ -83,6 +83,13 @@ func handle_event(event: GameEvent, world: GameWorld) -> void:
         GameEvent.Type.BRICK_HIT:
             shake = maxf(shake, 1.4)
             emit_burst(event.position, event.color.lightened(0.10), 5, 105.0, 2.1, 95.0)
+        GameEvent.Type.BREAKABLE_WALL_HIT:
+            shake = maxf(shake, 1.2)
+            emit_burst(event.position, ORANGE, 4, 95.0, 2.0, 90.0)
+        GameEvent.Type.BREAKABLE_WALL_DESTROYED:
+            shake = maxf(shake, 4.0)
+            flash_alpha = maxf(flash_alpha, 0.10)
+            emit_burst(event.position, GOLD, 26, 190.0, 3.0, 220.0)
         GameEvent.Type.BRICK_DESTROYED:
             combo_pop = 1.0
             var fire := world.is_fire_active()

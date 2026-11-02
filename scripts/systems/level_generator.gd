@@ -6,6 +6,8 @@ static func generate(definition: LevelDefinition, rng: RandomNumberGenerator) ->
     var result: Array[BrickData] = []
     if definition == null:
         return result
+    var blockers: Array[Rect2] = definition.walls.duplicate()
+    blockers.append_array(definition.breakable_walls)
 
     for row in range(definition.rows):
         var line := definition.grid[row] if row < definition.grid.size() else ""
@@ -22,16 +24,26 @@ static func generate(definition: LevelDefinition, rng: RandomNumberGenerator) ->
                 definition.brick_origin + Vector2(column, row) * definition.brick_step,
                 definition.brick_size
             )
-            if _intersects_wall(rect, definition.walls):
+            if _intersects_wall(rect, blockers):
                 continue
 
             var brick := BrickData.new()
             brick.rect = rect
             brick.color = _brick_color(definition, symbol, row, rng)
-            brick.max_hp = maxi(1, int(definition.brick_hp.get(symbol, 1)))
+            brick.max_hp = _brick_hp(definition, symbol)
             brick.hp = brick.max_hp
             result.append(brick)
     return result
+
+
+static func _brick_hp(definition: LevelDefinition, symbol: String) -> int:
+    if definition.brick_hp.has(symbol):
+        return maxi(1, int(definition.brick_hp[symbol]))
+    if not symbol.is_empty():
+        var code := symbol.unicode_at(0)
+        if code >= 49 and code <= 57:
+            return code - 48
+    return 1
 
 
 static func _brick_color(

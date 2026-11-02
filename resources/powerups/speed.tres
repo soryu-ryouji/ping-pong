@@ -10,4 +10,3 @@ short_name = "SPEED"
 color = Color(1, 0.835294, 0.415686, 1)
 pickup_pitch = 1.24
 multiplier = 1.18
-maximum_speed = 1410.0

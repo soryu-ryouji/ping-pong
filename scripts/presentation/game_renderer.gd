@@ -47,6 +47,7 @@ func _draw() -> void:
     draw_grid()
     draw_bricks()
     draw_walls()
+    draw_breakable_walls()
     draw_powerups()
     draw_trails()
     draw_particles()
@@ -195,6 +196,52 @@ func draw_walls() -> void:
             draw_line(wall.position + Vector2(wall.size.x - 2.0, 2.0), Vector2(wall.position.x + 1.0, wall.end.y - 2.0), Color("#293845"), 1.4, true)
             draw_circle(wall.position + Vector2(wall.size.x * 0.5, wall.size.x * 0.5), wall.size.x * 0.48, Color("#718695"))
             draw_circle(Vector2(wall.position.x + wall.size.x * 0.5, wall.end.y - wall.size.x * 0.5), wall.size.x * 0.48, Color("#718695"))
+
+
+func draw_breakable_walls() -> void:
+    for wall in world.breakable_walls:
+        if not wall.alive and wall.flash <= 0.0:
+            continue
+        var rect := wall.rect
+        if wall.shake > 0.0:
+            var strength := 2.0 * wall.shake
+            rect.position += Vector2(
+                sin(world.game_time * 88.0 + wall.rect.position.x * 0.17) * strength,
+                cos(world.game_time * 73.0 + wall.rect.position.y * 0.19) * strength * 0.7
+            )
+        var damage := 1.0 - float(wall.hp) / float(maxi(wall.max_hp, 1))
+        var tint := Color("#5e7181").lerp(Color("#ff9b45"), 0.18 + damage * 0.52)
+        var body := tint.lightened(0.10)
+        var highlight := tint.lightened(0.42)
+        draw_rect(rect.grow(8.0), Color(tint.r, tint.g, tint.b, 0.035), true)
+        draw_rect(rect.grow(2.0), Color(0.0, 0.0, 0.0, 0.65), true)
+        draw_rect(rect, tint, true)
+        draw_rect(Rect2(rect.position + Vector2(1.0, 1.0), rect.size - Vector2(2.0, 2.0)), body, true)
+        if rect.size.x >= rect.size.y:
+            draw_line(rect.position + Vector2(2.0, 1.0), Vector2(rect.end.x - 2.0, rect.position.y + 1.0), highlight, 1.4, true)
+            draw_line(rect.position + Vector2(2.0, rect.size.y - 2.0), Vector2(rect.end.x - 2.0, rect.end.y - 2.0), tint.darkened(0.50), 1.4, true)
+            draw_circle(rect.position + Vector2(rect.size.y * 0.5, rect.size.y * 0.5), rect.size.y * 0.48, tint.darkened(0.10))
+            draw_circle(Vector2(rect.end.x - rect.size.y * 0.5, rect.position.y + rect.size.y * 0.5), rect.size.y * 0.48, tint.darkened(0.10))
+        else:
+            draw_line(rect.position + Vector2(1.0, 2.0), Vector2(rect.position.x + 1.0, rect.end.y - 2.0), highlight, 1.4, true)
+            draw_line(rect.position + Vector2(rect.size.x - 2.0, 2.0), Vector2(rect.position.x + 1.0, rect.end.y - 2.0), tint.darkened(0.50), 1.4, true)
+            draw_circle(rect.position + Vector2(rect.size.x * 0.5, rect.size.x * 0.5), rect.size.x * 0.48, tint.darkened(0.10))
+            draw_circle(Vector2(rect.position.x + rect.size.x * 0.5, rect.end.y - rect.size.x * 0.5), rect.size.x * 0.48, tint.darkened(0.10))
+        var stage := mini(3, int(ceil(damage * 4.0)))
+        var cracks: Array = [
+            PackedVector2Array([Vector2(0.15, 0.30), Vector2(0.48, 0.62), Vector2(0.86, 0.38)]),
+            PackedVector2Array([Vector2(0.22, 0.78), Vector2(0.55, 0.36), Vector2(0.82, 0.70)]),
+            PackedVector2Array([Vector2(0.08, 0.52), Vector2(0.50, 0.48), Vector2(0.94, 0.55)]),
+        ]
+        for index in range(mini(stage, cracks.size())):
+            var points: PackedVector2Array = cracks[index]
+            var p0 := rect.position + rect.size * points[0]
+            var p1 := rect.position + rect.size * points[1]
+            var p2 := rect.position + rect.size * points[2]
+            draw_line(p0, p1, Color(0.03, 0.02, 0.02, 0.72), 1.2, true)
+            draw_line(p1, p2, Color(0.03, 0.02, 0.02, 0.72), 1.2, true)
+        if wall.flash > 0.02:
+            draw_rect(rect, Color(1.0, 0.88, 0.58, wall.flash * 0.48), true)
 
 
 func draw_powerups() -> void:

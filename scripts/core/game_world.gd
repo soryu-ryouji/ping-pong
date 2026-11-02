@@ -46,6 +46,7 @@ var paddle_flash := 0.0
 var balls: Array[BallData] = []
 var bricks: Array[BrickData] = []
 var walls: Array[Rect2] = []
+var breakable_walls: Array[BreakableWallData] = []
 var powerups: Array[PowerupData] = []
 var powerup_pity := 0
 var powerup_drop_counter := 0
@@ -95,12 +96,21 @@ func build_level() -> void:
     if definition == null:
         bricks = []
         walls = []
+        breakable_walls.clear()
         total_bricks = 1
         remaining_bricks = 0
         clear_fraction = 1.0
         return
     bricks = LevelGenerator.generate(definition, rng)
     walls = definition.walls.duplicate()
+    breakable_walls.clear()
+    var wall_hp := maxi(1, config.breakable_wall_hp)
+    for rect in definition.breakable_walls:
+        var wall := BreakableWallData.new()
+        wall.rect = rect
+        wall.hp = wall_hp
+        wall.max_hp = wall_hp
+        breakable_walls.append(wall)
     paddle_width = minf(paddle_width, paddle_max_width())
     paddle_target_x = _clamp_paddle_x(paddle_target_x)
     paddle_x = _clamp_paddle_x(paddle_x)
@@ -277,6 +287,8 @@ func boost_ball_speed(ball: BallData, amount: float) -> void:
     if speed <= 0.001:
         return
     var target := minf(speed + amount, config.max_ball_speed)
+    if target <= speed:
+        return
     ball.velocity = ball.velocity.normalized() * target
 
 
@@ -319,7 +331,7 @@ func update_balls(delta: float) -> void:
 
 
 func _rescue_stuck_ball(ball: BallData) -> void:
-    var speed := minf(maxf(ball.velocity.length(), config.base_ball_speed), config.max_ball_speed)
+    var speed := maxf(ball.velocity.length(), config.base_ball_speed)
     var angle := rng.randf_range(-0.68, 0.68)
     var x := clampf(
         ball.position.x,
@@ -496,6 +508,29 @@ func on_paddle_hit(hit_position: Vector2) -> void:
         add_message(Vector2(paddle_x, config.paddle_y - 58.0), "MULTIBALL", CYAN, 18, 0.8)
 
 
+func hit_breakable_wall(wall: BreakableWallData, ball_speed: float) -> bool:
+    if not wall.alive:
+        return false
+    if ball_speed < config.breakable_wall_min_speed:
+        wall.shake = maxf(wall.shake, 0.45)
+        return false
+    wall.hp -= 1
+    wall.flash = 1.0
+    wall.shake = 1.0
+    var center := wall.rect.get_center()
+    if wall.hp <= 0:
+        wall.alive = false
+        var destroyed := emit_event(GameEvent.Type.BREAKABLE_WALL_DESTROYED, center, GOLD)
+        destroyed.value = wall.max_hp
+        add_message(center, "WALL BREAK", GOLD, 20, 0.9)
+        return true
+    var hit := emit_event(GameEvent.Type.BREAKABLE_WALL_HIT, center, ORANGE)
+    hit.value = wall.hp
+    if wall.hp % 10 == 0:
+        add_message(center, "WALL %d" % wall.hp, ORANGE, 13, 0.45)
+    return false
+
+
 func hit_brick(brick: BrickData, damage := 1) -> bool:
     if not brick.alive:
         return false
@@ -598,6 +633,11 @@ func update_bricks(delta: float) -> void:
             brick.flash = maxf(0.0, brick.flash - delta * 5.0)
         if brick.shake > 0.0:
             brick.shake = maxf(0.0, brick.shake - delta * 8.0)
+    for wall in breakable_walls:
+        if wall.flash > 0.0:
+            wall.flash = maxf(0.0, wall.flash - delta * 5.0)
+        if wall.shake > 0.0:
+            wall.shake = maxf(0.0, wall.shake - delta * 8.0)
 
 
 func is_fire_active() -> bool:
