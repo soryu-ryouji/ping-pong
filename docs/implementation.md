@@ -36,7 +36,7 @@ GameRenderer       GameEffects   GameAudioManager
 - `level_manifest`：关卡顺序清单，默认 `res://resources/levels/levels.txt`。
 - `powerups`：当前 `PowerupCatalog`。
 
-与关卡布局相关的字段还有 `brick_area_margin`、`brick_area_max_height` 和 `brick_area_bottom`，分别控制 fit 模式的左右留白、砖块区最大高度，以及 fill 模式的底部边界。挡板成长由 `paddle_grow_per_hit` 控制，当前为每次 `+10px`；`GameWorld.paddle_max_width()` 取当前关卡 `brick_wall_width()`，所以挡板不会超过砖墙宽度。挡板的颜色升级按“基础宽度以上的增长量”计算，`paddle_flash` 驱动升级闪光；球掉落时 `_shrink_paddle_after_loss()` 会把额外宽度削减到原来的 `1/3`。
+与关卡布局相关的字段还有 `brick_area_margin`、`brick_area_max_height` 和 `brick_area_bottom`，分别控制 fit 模式的左右留白、砖块区最大高度，以及 fill 模式的底部边界。挡板成长由 `paddle_grow_per_hit` 控制，当前为每次 `+10px`；`GameWorld.paddle_max_width()` 取当前关卡 `brick_wall_width()`，所以挡板不会超过砖墙宽度。挡板的颜色升级按“基础宽度以上的增长量”计算，`paddle_flash` 驱动升级闪光；球掉落时 `_shrink_paddle_after_loss()` 会固定缩减 `paddle_shrink_per_loss`（默认 `20px`），不会低于基础宽度。
 
 挡板移动由 `paddle_move_speed()` 控制：按当前扩展量在 `paddle_base_move_speed` 和 `paddle_min_move_speed` 之间插值，`update_paddle()` 用限速移动代替固定插值，所以变宽后更考验预判，缩回后速度恢复。经验曲线由 `xp_base_gain`、`xp_combo_scale`、`xp_required_base` 和 `xp_required_growth` 控制。`breakable_wall_hp` 和 `breakable_wall_min_speed` 控制 `+` 墙的耐久与速度门槛。
 
@@ -93,9 +93,9 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 
 碰撞到多段耐久砖时，`CollisionSystem` 调用 `GameWorld.hit_brick()`。未击碎时砖块进入 `shake` 状态并发出 `BRICK_HIT`；击碎时才进入 `destroy_brick()`，结算 FIRE、道具和清除进度。FIRE RUSH 传入高伤害，直接击碎。
 
-`+` 墙由 `BreakableWallData` 表示，`collide_breakable_walls()` 负责反弹和检测球速。只有球速达到 `breakable_wall_min_speed` 时，`hit_breakable_wall()` 才会扣除 1 点 HP；HP 归零后墙段消失。低速碰撞只反弹并轻微震动，不扣血。
+`+` 墙由 `BreakableWallData` 表示，`collide_breakable_walls()` 负责反弹和检测球速。只有球速达到 `breakable_wall_min_speed` 时，`hit_breakable_wall()` 才会扣除 1 点 HP；HP 归零后墙段消失。低速碰撞只反弹并轻微震动，不扣血。`remaining_bricks` 和 `remaining_breakable_walls` 同时归零才会触发 `clear_level()`，`clear_fraction` 也按两者总数计算。
 
-`on_paddle_hit()` 增加接球 COMBO，并发出 `COMBO_POP` 让右上角数字弹跳/抖动；同时按当前 COMBO 调用 `add_xp()`；满条后 `xp_required` 按 `xp_required_growth` 增长，发出 `XP_LEVEL_UP`，并通过 `double_balls()` 翻倍当前球数（上限 `powerup_max_balls`）。`double_balls()` 同时被 MULTI 道具复用。破砖不增加 COMBO 或 XP。
+`on_paddle_hit()` 增加接球 COMBO，并发出 `COMBO_POP` 让右上角数字弹跳/抖动；同时按当前 COMBO 调用 `add_xp()`。达到 `combo_first_life_reward` 和后续 `combo_life_reward_interval` 时，同样调用 `apply_level_up_reward()` 发放奖励，不再生成额外小球。满 XP 条后 `xp_required` 按 `xp_required_growth` 增长，发出 `XP_LEVEL_UP`，并调用 `apply_level_up_reward()`。当前 `GameConfig.level_up_reward` 指向 `ExtraLifeReward`，奖励 `+1 LIFE`；`UpgradeReward` 是可继承的资源接口，后续技能选择只需替换或传入选中的 reward。`double_balls()` 只由 MULTI 道具使用。破砖不增加 COMBO 或 XP。
 
 若需要完全不同的生成算法，可以替换 `LevelGenerator`，或在 `LevelDefinition` 中增加字段，而不必修改碰撞或表现模块。
 
@@ -126,11 +126,12 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 - `BALL_LAUNCHED` / `BALL_LOST` / `BALL_SPLIT`
 - `WALL_HIT` / `OBSTACLE_HIT` / `PADDLE_HIT`
 - `BRICK_HIT` / `BRICK_DESTROYED` / `BREAKABLE_WALL_HIT` / `BREAKABLE_WALL_DESTROYED` / `POWERUP_DROPPED` / `POWERUP_COLLECTED`
+- `BRICK_DESTROYED` 的 `event.size` 携带砖块最大耐久，供表现层放大彩色碎片粒子
 - `FIRE_STARTED` / `FIRE_ENDED` / `XP_LEVEL_UP`
 - `LEVEL_CLEARED` / `LEVEL_STARTED` / `GAME_OVER` / `RUN_RESET`
 - `MESSAGE` / `COMBO_POP`
 
-HUD 的 COMBO 字号由 `combo_font_size()` 按 `10 / 30 / 50 / 100 / 200 / 500` 阈值切换，COMBO 标签的位移和缩放由 `GameEffects.combo_pop` 驱动。
+HUD 的 COMBO 字号由 `combo_font_size()` 按 `10 / 30 / 50 / 100 / 200 / 500` 阈值切换，COMBO 标签的位移和缩放由 `GameEffects.combo_pop` 驱动；底部 `LIVES` 会随升级奖励立即更新。
 
 新增表现时优先消费现有语义事件，避免让核心世界引用表现类。
 
@@ -147,7 +148,7 @@ HUD 的 COMBO 字号由 `combo_font_size()` 按 `10 / 30 / 50 / 100 / 200 / 500`
 
 - `tests/powerup_test.gd`：道具拾取、1 → 2 → 4 多球、速度提升、保底和掉落顺序。
 - `tests/level_test.gd`：关卡清单、文本解析、符号配色、多段耐久、自动布局、墙体与砖块生成。
-- `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时、关卡循环、开发者跳关、挡板成长/收缩与移动速度、反弹加速上限、可破坏墙、卡球救援、多段耐久砖、SPEED 无上限和经验升级。
+- `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时、关卡循环、开发者跳关、挡板成长/收缩与移动速度、反弹加速上限、可破坏墙、卡球救援、多段耐久砖、SPEED 无上限和经验升级奖励。
 - `tests/scene_smoke_test.gd`：主场景组合、模块创建和发射流程。
 - `tests/powerup_preview.gd`：生成道具预览图。
 
