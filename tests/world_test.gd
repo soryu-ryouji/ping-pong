@@ -15,6 +15,7 @@ func _initialize() -> void:
     test_paddle_shrink_on_loss()
     test_wall_penetration_resolution()
     test_stuck_ball_rescue()
+    test_xp_level_up()
     test_brick_hit_stages()
     quit(1 if failures > 0 else 0)
 
@@ -153,8 +154,8 @@ func test_paddle_growth() -> void:
         is_equal_approx(world.paddle_width, config.paddle_width + config.paddle_grow_per_hit),
         "Paddle should grow by the configured amount after a hit"
     )
-    for index in range(200):
-        world.on_paddle_hit(Vector2(world.paddle_x, config.paddle_y))
+    world.paddle_width = max_width - 1.0
+    world.on_paddle_hit(Vector2(world.paddle_x, config.paddle_y))
     check(
         is_equal_approx(world.paddle_width, max_width),
         "Paddle width should cap at the brick wall width"
@@ -250,6 +251,40 @@ func test_wall_penetration_resolution() -> void:
     world.collision.collide_walls(world, ball)
     check(not world.walls[0].has_point(ball.position), "Wall collision should push the ball out")
     check(ball.velocity.length() > before_speed, "Wall bounce should increase ball speed")
+
+
+func test_xp_level_up() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    check(world.xp_level == 1, "XP should start at level 1")
+    check(world.xp == 0.0, "XP should start empty")
+    check(
+        is_equal_approx(world.xp_required, config.xp_required_base),
+        "First XP requirement should use the configured base"
+    )
+    check(
+        world.xp_gain_for_combo(100) > world.xp_gain_for_combo(10),
+        "Higher combo should grant more XP per hit"
+    )
+    world.primary_action()
+    var balls_before := world.balls.size()
+    var required := world.xp_required
+    world.add_xp(required)
+    check(world.xp_level == 2, "Filling the XP bar should level up")
+    check(world.balls.size() == balls_before * 2, "XP level up should double current balls")
+    check(world.xp_flash > 0.0, "XP level up should trigger the bar flash")
+    check(world.xp_required > required, "Next XP requirement should increase")
+    check(world.xp < world.xp_required, "XP remainder should be below the new requirement")
+    world.reset_run()
+    var xp_before := world.xp
+    world.on_paddle_hit(Vector2(world.paddle_x, config.paddle_y))
+    check(world.combo == 1, "Paddle catch should increment COMBO")
+    check(world.xp > xp_before, "Paddle catch should grant XP")
+    world.destroy_brick(world.bricks[0])
+    check(world.combo == 1, "Brick destruction should not change paddle COMBO")
+    world.reset_run()
+    check(world.xp == 0.0 and world.xp_level == 1, "Run reset should clear XP progress")
 
 
 func test_brick_hit_stages() -> void:
