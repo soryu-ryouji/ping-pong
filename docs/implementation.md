@@ -36,6 +36,8 @@ GameRenderer       GameEffects   GameAudioManager
 - `level_manifest`：关卡顺序清单，默认 `res://resources/levels/levels.txt`。
 - `powerups`：当前 `PowerupCatalog`。
 
+与关卡布局相关的字段还有 `brick_area_margin`、`brick_area_max_height` 和 `brick_area_bottom`，分别控制 fit 模式的左右留白、砖块区最大高度，以及 fill 模式的底部边界。
+
 关卡布局保存在 `resources/levels/*.txt`，格式见 [levels.md](levels.md)。`GameWorld` 启动时用 `LevelLoader` 读取清单，运行时保存 `levels: Array[LevelDefinition]`、`level_index` 和 `loop_count`。
 
 实体采用 `BallData`、`BrickData`、`PowerupData`，不再依赖字符串键字典。游戏状态使用 `GameWorld.State` 枚举。
@@ -81,7 +83,7 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 2. 把文件名加入 `resources/levels/levels.txt`。
 3. 运行 `tests/level_test.gd` 检查解析、砖块生成和墙体不重叠。
 
-完整格式、符号表和编关流程见 [levels.md](levels.md)。`LevelLoader` 会把 `X` / `=` 转成整格墙，把 `+` 按上下左右邻居拆成细墙段和连接段；`LevelGenerator` 只处理砖块符号。`GameWorld.build_level()` 每次从当前 `LevelDefinition` 生成砖块和墙；清关倒计时结束后 `next_level()` 推进 `level_index`，越过末尾时回到 `0` 并增加 `loop_count`。`wave` 是全局难度计数，持续增长并影响基础球速。
+完整格式、符号表和编关流程见 [levels.md](levels.md)。`LevelLoader` 会先根据网格列数、砖块行数和 `GameConfig` 的可用区域做自动布局：默认 fit 模式按需统一缩放并水平居中；关卡写 `fill_field = true` 时改为按列数/总行数铺满可用区域；`auto_layout = false` 时保留手动 `origin` / `brick_size` / `step`。然后再把 `X` / `=` 转成整格墙，把 `+` 按上下左右邻居拆成细墙段和连接段。`LevelGenerator` 只处理砖块符号。`GameWorld.build_level()` 每次从当前 `LevelDefinition` 生成砖块和墙；清关倒计时结束后 `next_level()` 推进 `level_index`，越过末尾时回到 `0` 并增加 `loop_count`。`wave` 是全局难度计数，持续增长并影响基础球速。
 
 若需要完全不同的生成算法，可以替换 `LevelGenerator`，或在 `LevelDefinition` 中增加字段，而不必修改碰撞或表现模块。
 
@@ -130,7 +132,7 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 ## 7. 测试
 
 - `tests/powerup_test.gd`：道具拾取、1 → 2 → 4 多球、速度提升、保底和掉落顺序。
-- `tests/level_test.gd`：关卡清单、文本解析、符号配色、墙体与砖块生成。
+- `tests/level_test.gd`：关卡清单、文本解析、符号配色、自动布局、墙体与砖块生成。
 - `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时、关卡循环和开发者跳关。
 - `tests/scene_smoke_test.gd`：主场景组合、模块创建和发射流程。
 - `tests/powerup_preview.gd`：生成道具预览图。

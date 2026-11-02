@@ -9,6 +9,9 @@ extends Resource
 @export var inner_left := 42.0
 @export var inner_right := 678.0
 @export var inner_top := 118.0
+@export var brick_area_margin := 8.0
+@export var brick_area_max_height := 420.0
+@export var brick_area_bottom := 772.0
 @export var paddle_y := 824.0
 @export var paddle_width := 116.0
 @export var paddle_height := 14.0

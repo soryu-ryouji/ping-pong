@@ -48,7 +48,7 @@ var powerup_drop_counter := 0
 func _init(game_config: GameConfig) -> void:
     config = game_config
     rng.seed = config.random_seed
-    levels = LevelLoader.load_manifest(config.level_manifest)
+    levels = LevelLoader.load_manifest(config.level_manifest, config)
 
 
 func reset_run() -> void:

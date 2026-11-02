@@ -4,7 +4,7 @@ extends RefCounted
 const COMMENT_PREFIXES := ["//", ";", "#"]
 
 
-static func load_manifest(manifest_path: String) -> Array[LevelDefinition]:
+static func load_manifest(manifest_path: String, config: GameConfig = null) -> Array[LevelDefinition]:
     var result: Array[LevelDefinition] = []
     if manifest_path.is_empty():
         push_error("Level manifest path is empty")
@@ -26,7 +26,7 @@ static func load_manifest(manifest_path: String) -> Array[LevelDefinition]:
             var with_extension := level_path + ".txt"
             if FileAccess.file_exists(with_extension):
                 level_path = with_extension
-        var definition := load_definition(level_path)
+        var definition := load_definition(level_path, config)
         if definition != null:
             result.append(definition)
     if result.is_empty():
@@ -34,7 +34,7 @@ static func load_manifest(manifest_path: String) -> Array[LevelDefinition]:
     return result
 
 
-static func load_definition(path: String) -> LevelDefinition:
+static func load_definition(path: String, config: GameConfig = null) -> LevelDefinition:
     if not FileAccess.file_exists(path):
         push_error("Level file not found: %s" % path)
         return null
@@ -45,6 +45,7 @@ static func load_definition(path: String) -> LevelDefinition:
 
     var definition := LevelDefinition.new()
     definition.layout_file = path
+    var layout_config: GameConfig = config if config != null else GameConfig.new()
     var grid_lines: PackedStringArray = []
     var symbol_colors := {}
     var walls: Array[Rect2] = []
@@ -74,10 +75,22 @@ static func load_definition(path: String) -> LevelDefinition:
 
     definition.rows = grid_lines.size()
     definition.columns = 0
-    for line in grid_lines:
+    definition.brick_rows = 0
+    for row in range(definition.rows):
+        var line := grid_lines[row]
         definition.columns = maxi(definition.columns, line.length())
+        for column in range(line.length()):
+            var symbol := line[column]
+            if symbol == "." or symbol == " " or symbol == "X" or symbol == "=" or symbol == "+":
+                continue
+            definition.brick_rows = maxi(definition.brick_rows, row + 1)
     definition.grid = grid_lines
     definition.symbol_colors = symbol_colors
+    if definition.auto_layout:
+        if definition.fill_field:
+            _apply_fill_layout(definition, layout_config)
+        else:
+            _apply_auto_layout(definition, layout_config)
 
     for row in range(definition.rows):
         for column in range(definition.columns):
@@ -98,7 +111,6 @@ static func load_definition(path: String) -> LevelDefinition:
             var symbol := _symbol_at(grid_lines[row], column)
             if symbol == "." or symbol == " " or symbol == "X" or symbol == "=" or symbol == "+":
                 continue
-            definition.brick_rows = maxi(definition.brick_rows, row + 1)
             brick_symbols += 1
             var rect := Rect2(
                 definition.brick_origin + Vector2(column, row) * definition.brick_step,
@@ -141,6 +153,10 @@ static func _parse_setting(
             definition.brick_size = _parse_vector2(value, definition.brick_size)
         "step":
             definition.brick_step = _parse_vector2(value, definition.brick_step)
+        "auto_layout":
+            definition.auto_layout = _parse_bool(value)
+        "fill_field":
+            definition.fill_field = _parse_bool(value)
         "hue_start":
             definition.hue_start = value.to_float()
         "hue_end":
@@ -177,6 +193,11 @@ static func _parse_vector2(value: String, fallback: Vector2) -> Vector2:
     return Vector2(parts[0], parts[1])
 
 
+static func _parse_bool(value: String) -> bool:
+    var normalized := value.strip_edges().to_lower()
+    return normalized == "true" or normalized == "1" or normalized == "yes" or normalized == "on"
+
+
 static func _parse_floats(value: String) -> PackedFloat32Array:
     var parts := value.replace(",", " ").replace("\t", " ").split(" ", false)
     var result := PackedFloat32Array()
@@ -207,6 +228,66 @@ static func _intersects_wall(rect: Rect2, walls: Array[Rect2]) -> bool:
         if wall.grow(3.0).intersects(rect):
             return true
     return false
+
+
+static func _apply_auto_layout(definition: LevelDefinition, config: GameConfig) -> void:
+    if definition.columns <= 0 or definition.brick_rows <= 0:
+        return
+    var natural_width := float(definition.columns - 1) * definition.brick_step.x + definition.brick_size.x
+    var natural_height := float(definition.brick_rows - 1) * definition.brick_step.y + definition.brick_size.y
+    var natural_total_height := float(definition.rows - 1) * definition.brick_step.y + definition.brick_size.y
+    var available_width := maxf(1.0, config.inner_right - config.inner_left - config.brick_area_margin * 2.0)
+    var available_height := maxf(1.0, config.brick_area_max_height)
+    var available_total_height := maxf(1.0, config.field_bottom - definition.brick_origin.y - 120.0)
+
+    var scale := 1.0
+    if natural_width > available_width:
+        scale = minf(scale, available_width / natural_width)
+    if natural_height > available_height:
+        scale = minf(scale, available_height / natural_height)
+    if natural_total_height > available_total_height:
+        scale = minf(scale, available_total_height / natural_total_height)
+    scale = clampf(scale, 0.2, 1.0)
+
+    definition.brick_size *= scale
+    definition.brick_step *= scale
+    definition.wall_thickness = maxf(2.0, definition.wall_thickness * scale)
+
+    var grid_width := float(definition.columns - 1) * definition.brick_step.x + definition.brick_size.x
+    definition.brick_origin.x = config.inner_left + (config.inner_right - config.inner_left - grid_width) * 0.5
+
+
+static func _apply_fill_layout(definition: LevelDefinition, config: GameConfig) -> void:
+    if definition.columns <= 0 or definition.rows <= 0:
+        return
+    var old_size := definition.brick_size
+    var old_step := definition.brick_step
+    var size_ratio_x := old_size.x / maxf(old_step.x, 0.001)
+    var size_ratio_y := old_size.y / maxf(old_step.y, 0.001)
+    var area_left := config.inner_left
+    var area_right := config.inner_right
+    var area_top := definition.brick_origin.y
+    var area_bottom := maxf(area_top + 1.0, config.brick_area_bottom)
+    var available_width := maxf(1.0, area_right - area_left)
+    var available_height := maxf(1.0, area_bottom - area_top)
+
+    definition.brick_step = Vector2(
+        available_width / float(definition.columns),
+        available_height / float(definition.rows)
+    )
+    definition.brick_size = Vector2(
+        definition.brick_step.x * size_ratio_x,
+        definition.brick_step.y * size_ratio_y
+    )
+    definition.brick_origin = Vector2(
+        area_left + (definition.brick_step.x - definition.brick_size.x) * 0.5,
+        area_top + (definition.brick_step.y - definition.brick_size.y) * 0.5
+    )
+    var scale := minf(
+        definition.brick_size.x / maxf(old_size.x, 0.001),
+        definition.brick_size.y / maxf(old_size.y, 0.001)
+    )
+    definition.wall_thickness = maxf(2.0, definition.wall_thickness * scale)
 
 
 static func _append_thin_walls(

@@ -6,6 +6,7 @@ var failures := 0
 func _initialize() -> void:
     test_manifest_and_parse()
     test_generation()
+    test_auto_layout()
     if failures == 0:
         print("LEVEL TEST PASS")
     quit(1 if failures > 0 else 0)
@@ -15,7 +16,7 @@ func test_manifest_and_parse() -> void:
     var config: GameConfig = load("res://resources/game_config.tres")
     check(config.level_manifest == "res://resources/levels/levels.txt", "Unexpected level manifest path")
 
-    var levels := LevelLoader.load_manifest(config.level_manifest)
+    var levels := LevelLoader.load_manifest(config.level_manifest, config)
     check(levels.size() >= 1, "Level manifest should load at least one level")
     for definition in levels:
         check(definition.rows > 0, "Level has no rows: %s" % definition.layout_file)
@@ -25,7 +26,7 @@ func test_manifest_and_parse() -> void:
             check(line.length() > 0, "Empty grid line in %s" % definition.layout_file)
             check(line.length() <= definition.columns, "Grid line wider than columns in %s" % definition.layout_file)
 
-    var labyrinth := LevelLoader.load_definition("res://resources/levels/01_labyrinth.txt")
+    var labyrinth := LevelLoader.load_definition("res://resources/levels/01_labyrinth.txt", config)
     check(labyrinth != null, "Labyrinth sample should load")
     if labyrinth != null:
         check(labyrinth.display_name == "Labyrinth", "Labyrinth name mismatch")
@@ -38,7 +39,7 @@ func test_manifest_and_parse() -> void:
                 break
         check(thin_found, "Labyrinth should generate thin + walls")
 
-    var corridors := LevelLoader.load_definition("res://resources/levels/02_corridors.txt")
+    var corridors := LevelLoader.load_definition("res://resources/levels/02_corridors.txt", config)
     check(corridors != null, "Corridors sample should load")
     if corridors != null:
         check(corridors.walls.size() > 0, "Corridors should parse + cells as walls")
@@ -58,7 +59,7 @@ func test_manifest_and_parse() -> void:
 
 func test_generation() -> void:
     var config: GameConfig = load("res://resources/game_config.tres")
-    var levels := LevelLoader.load_manifest(config.level_manifest)
+    var levels := LevelLoader.load_manifest(config.level_manifest, config)
     var rng := RandomNumberGenerator.new()
     rng.seed = 12345
 
@@ -73,14 +74,14 @@ func test_generation() -> void:
                     break
         check(not overlap, "Brick overlaps a wall in %s" % definition.layout_file)
 
-    var labyrinth := LevelLoader.load_definition("res://resources/levels/01_labyrinth.txt")
+    var labyrinth := LevelLoader.load_definition("res://resources/levels/01_labyrinth.txt", config)
     var labyrinth_colors := {}
     if labyrinth != null:
         for brick in LevelGenerator.generate(labyrinth, rng):
             labyrinth_colors[brick.color.to_html(false)] = true
     check(labyrinth_colors.size() >= 3, "Gradient bricks should produce multiple colors")
 
-    var corridors := LevelLoader.load_definition("res://resources/levels/02_corridors.txt")
+    var corridors := LevelLoader.load_definition("res://resources/levels/02_corridors.txt", config)
     var override_color := Color("#ff6b6b")
     var override_found := false
     if corridors != null:
@@ -92,6 +93,41 @@ func test_generation() -> void:
         LevelDefinition.palette_color("2") == LevelDefinition.SYMBOL_PALETTE[1],
         "Digit palette mapping mismatch"
     )
+
+
+func test_auto_layout() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var line := LevelLoader.load_definition("res://resources/levels/04_line.txt", config)
+    check(line != null, "Line sample should load with auto layout")
+    if line != null:
+        check(line.columns == 24, "Line should keep its 24-column grid")
+        check(line.fill_field, "Line should use fill layout")
+        check(line.brick_size.x < 34.0, "Wide Level should scale bricks down")
+        check(line.brick_size.y < 23.0, "Wide Level should scale brick height too")
+        check(line.brick_origin.x >= config.inner_left - 0.01, "Auto layout should stay inside the field")
+        var grid_right := line.brick_origin.x + float(line.columns - 1) * line.brick_step.x + line.brick_size.x
+        check(grid_right <= config.inner_right + 0.01, "Auto layout should fit the right edge")
+        check(absf(line.brick_origin.x - config.inner_left) < 5.0, "Fill layout should use the left edge")
+        check(absf(grid_right - config.inner_right) < 5.0, "Fill layout should use the right edge")
+        var grid_bottom := line.brick_origin.y + float(line.rows - 1) * line.brick_step.y + line.brick_size.y
+        check(absf(grid_bottom - config.brick_area_bottom) < 5.0, "Fill layout should use the bottom edge")
+        var overflow := false
+        for wall in line.walls:
+            if (
+                wall.position.x < config.field_left - 0.01
+                or wall.end.x > config.field_right + 0.01
+                or wall.position.y < config.inner_top - 0.01
+                or wall.end.y > config.field_bottom + 0.01
+            ):
+                overflow = true
+                break
+        check(not overflow, "Line walls should stay inside the play field")
+
+    var labyrinth := LevelLoader.load_definition("res://resources/levels/01_labyrinth.txt", config)
+    check(labyrinth != null, "Labyrinth sample should load")
+    if labyrinth != null:
+        check(is_equal_approx(labyrinth.brick_size.x, 34.0), "Standard-width Level should not scale")
+        check(is_equal_approx(labyrinth.brick_size.y, 23.0), "Standard-height Level should not scale")
 
 
 func check(condition: bool, message: String) -> void:

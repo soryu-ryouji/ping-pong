@@ -21,6 +21,8 @@ const LOWER_END := 122
 
 @export var layout_file := ""
 @export var display_name := ""
+@export var auto_layout := true
+@export var fill_field := false
 @export var rows := 0
 @export var columns := 0
 @export var brick_rows := 0
