@@ -14,6 +14,9 @@ func _initialize() -> void:
     test_ball_bounce_speed_cap()
     test_paddle_shrink_on_loss()
     test_wall_penetration_resolution()
+    test_breakable_wall_hp()
+    test_breakable_wall_collision_speed()
+    test_speed_powerup_uncapped()
     test_stuck_ball_rescue()
     test_xp_level_up()
     test_brick_hit_stages()
@@ -219,6 +222,71 @@ func test_paddle_shrink_on_loss() -> void:
     var expected := config.paddle_width + (200.0 - config.paddle_width) / 3.0
     check(is_equal_approx(world.paddle_width, expected), "Ball loss should remove two thirds of extra paddle width")
     check(world.paddle_move_speed() > speed_before, "Ball loss shrink should restore some paddle move speed")
+
+
+func test_breakable_wall_hp() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    var wall := BreakableWallData.new()
+    wall.hp = config.breakable_wall_hp
+    wall.max_hp = config.breakable_wall_hp
+    check(
+        not world.hit_breakable_wall(wall, config.breakable_wall_min_speed - 1.0),
+        "Slow ball should not damage a breakable wall"
+    )
+    check(wall.hp == config.breakable_wall_hp, "Slow hit should not consume wall HP")
+    for index in range(config.breakable_wall_hp - 1):
+        world.hit_breakable_wall(wall, config.breakable_wall_min_speed)
+    check(wall.alive, "Breakable wall should survive until the final hit")
+    world.hit_breakable_wall(wall, config.breakable_wall_min_speed)
+    check(not wall.alive, "Breakable wall should break after 99 qualifying hits")
+
+
+func test_breakable_wall_collision_speed() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    world.breakable_walls.clear()
+    var wall := BreakableWallData.new()
+    wall.rect = Rect2(300.0, 300.0, 12.0, 100.0)
+    wall.hp = 99
+    wall.max_hp = 99
+    world.breakable_walls.append(wall)
+
+    var ball := BallData.new()
+    ball.position = Vector2(294.0, 350.0)
+    ball.velocity = Vector2(config.breakable_wall_min_speed - 1.0, 0.0)
+    world.collision.collide_breakable_walls(world, ball)
+    check(wall.hp == 99, "Below-threshold ball should not damage a breakable wall")
+
+    ball.position = Vector2(294.0, 350.0)
+    ball.velocity = Vector2(config.breakable_wall_min_speed, 0.0)
+    world.collision.collide_breakable_walls(world, ball)
+    check(wall.hp == 98, "Qualifying ball should damage a breakable wall")
+
+
+func test_speed_powerup_uncapped() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    var ball := BallData.new()
+    ball.velocity = Vector2(config.max_ball_speed, 0.0)
+    world.balls.append(ball)
+    var speed_definition := config.powerups.get_definition(&"speed")
+    check(speed_definition != null, "SPEED powerup should exist")
+    if speed_definition != null:
+        speed_definition.apply(world, Vector2.ZERO)
+    check(
+        ball.velocity.length() > config.max_ball_speed,
+        "SPEED powerup should accelerate beyond the bounce cap"
+    )
+    var boosted_speed := ball.velocity.length()
+    world.boost_ball_speed(ball, config.bounce_speed_increment)
+    check(
+        is_equal_approx(ball.velocity.length(), boosted_speed),
+        "Bounce boost should not reduce an over-cap SPEED ball"
+    )
 
 
 func test_stuck_ball_rescue() -> void:

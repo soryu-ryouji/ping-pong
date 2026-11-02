@@ -31,10 +31,10 @@ func test_manifest_and_parse() -> void:
     check(labyrinth != null, "Labyrinth sample should load")
     if labyrinth != null:
         check(labyrinth.display_name == "Labyrinth", "Labyrinth name mismatch")
-        check(labyrinth.walls.size() > 0, "Labyrinth should have walls")
+        check(labyrinth.breakable_walls.size() > 0, "Labyrinth should have breakable + walls")
         check(labyrinth.wall_thickness == 12.0, "Labyrinth wall thickness mismatch")
         var thin_found := false
-        for wall in labyrinth.walls:
+        for wall in labyrinth.breakable_walls:
             if is_equal_approx(minf(wall.size.x, wall.size.y), labyrinth.wall_thickness):
                 thin_found = true
                 break
@@ -43,13 +43,13 @@ func test_manifest_and_parse() -> void:
     var corridors := LevelLoader.load_definition("res://resources/levels/02_corridors.txt", config)
     check(corridors != null, "Corridors sample should load")
     if corridors != null:
-        check(corridors.walls.size() > 0, "Corridors should parse + cells as walls")
+        check(corridors.breakable_walls.size() > 0, "Corridors should parse + cells as breakable walls")
         check(corridors.symbol_colors.has("2"), "Corridors should parse color.2")
         if corridors.symbol_colors.has("2"):
             check(corridors.symbol_colors["2"] == Color("#ff6b6b"), "Corridors color.2 mismatch")
         var horizontal_run := false
         var vertical_run := false
-        for wall in corridors.walls:
+        for wall in corridors.breakable_walls:
             if is_equal_approx(wall.size.x, 151.0) and is_equal_approx(wall.size.y, 12.0):
                 horizontal_run = true
             if is_equal_approx(wall.size.x, 12.0) and is_equal_approx(wall.size.y, 81.0):
@@ -70,6 +70,12 @@ func test_generation() -> void:
         var overlap := false
         for brick in bricks:
             for wall in definition.walls:
+                if wall.grow(3.0).intersects(brick.rect):
+                    overlap = true
+                    break
+            if overlap:
+                break
+            for wall in definition.breakable_walls:
                 if wall.grow(3.0).intersects(brick.rect):
                     overlap = true
                     break
@@ -112,7 +118,7 @@ func test_auto_layout() -> void:
         var grid_bottom := line.brick_origin.y + float(line.rows - 1) * line.brick_step.y + line.brick_size.y
         check(absf(grid_bottom - config.brick_area_bottom) < 5.0, "Fill layout should use the bottom edge")
         var overflow := false
-        for wall in line.walls:
+        for wall in line.walls + line.breakable_walls:
             if (
                 wall.position.x < config.field_left - 0.01
                 or wall.end.x > config.field_right + 0.01
@@ -152,6 +158,17 @@ func test_brick_hp() -> void:
             check(brick.hp == 2, "Two-HP brick should start at full HP")
     check(found_three, "Armor fixture should generate a three-HP brick")
     check(found_two, "Armor fixture should generate a two-HP brick")
+
+    var digits := LevelDefinition.new()
+    digits.rows = 1
+    digits.columns = 3
+    digits.grid = PackedStringArray(["129"])
+    var digit_bricks := LevelGenerator.generate(digits, rng)
+    check(digit_bricks.size() == 3, "Digit HP fixture should generate three bricks")
+    for brick in digit_bricks:
+        var column := int(round((brick.rect.position.x - digits.brick_origin.x) / digits.brick_step.x))
+        var expected: int = [1, 2, 9][column]
+        check(brick.max_hp == expected, "Digit symbol should set brick HP: column %d" % column)
 
 
 func check(condition: bool, message: String) -> void:
