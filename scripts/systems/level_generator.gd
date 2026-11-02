@@ -28,6 +28,8 @@ static func generate(definition: LevelDefinition, rng: RandomNumberGenerator) ->
             var brick := BrickData.new()
             brick.rect = rect
             brick.color = _brick_color(definition, symbol, row, rng)
+            brick.max_hp = maxi(1, int(definition.brick_hp.get(symbol, 1)))
+            brick.hp = brick.max_hp
             result.append(brick)
     return result
 

@@ -123,9 +123,18 @@ func draw_bricks() -> void:
         if not brick.alive and brick.flash <= 0.0:
             continue
         var rect := brick.rect
+        if brick.shake > 0.0:
+            var strength := 2.2 * brick.shake
+            rect.position += Vector2(
+                sin(world.game_time * 95.0 + brick.rect.position.x * 0.13) * strength,
+                cos(world.game_time * 78.0 + brick.rect.position.y * 0.17) * strength * 0.7
+            )
         var color := brick.color
         var flash := brick.flash
-        var lit := color.lerp(Color.WHITE, flash * 0.7)
+        var damage := 0.0
+        if brick.max_hp > 1:
+            damage = 1.0 - float(brick.hp) / float(brick.max_hp)
+        var lit := color.lerp(Color.WHITE, flash * 0.7).darkened(damage * 0.18)
         draw_rect(rect.grow(5.0), Color(color.r, color.g, color.b, 0.035 + flash * 0.07), true)
         draw_rect(rect.grow(6.0), Color(color.r, color.g, color.b, 0.012 + flash * 0.05), true)
         draw_rect(rect.grow(1.0), Color(0.0, 0.0, 0.0, 0.82), true)
@@ -133,8 +142,40 @@ func draw_bricks() -> void:
         draw_rect(Rect2(rect.position + Vector2(1.0, 1.0), rect.size - Vector2(2.0, 4.0)), lit, true)
         draw_rect(Rect2(rect.position + Vector2(1.0, 1.0), Vector2(rect.size.x - 2.0, 2.0)), lit.lightened(0.38), true)
         draw_rect(Rect2(rect.position + Vector2(1.0, rect.size.y - 4.0), Vector2(rect.size.x - 2.0, 2.0)), lit.darkened(0.52), true)
+        if brick.max_hp > 1:
+            draw_brick_damage(rect, brick, damage)
         if flash > 0.02:
             draw_rect(rect, Color(1.0, 1.0, 1.0, flash * 0.55), true)
+
+
+func draw_brick_damage(rect: Rect2, brick: BrickData, damage: float) -> void:
+    var inner := rect.grow(-2.5)
+    if inner.size.x > 0.0 and inner.size.y > 0.0:
+        draw_rect(inner, Color(1.0, 1.0, 1.0, 0.14 - damage * 0.06), false, 1.0)
+    for corner: Vector2 in [Vector2(0.16, 0.18), Vector2(0.84, 0.18), Vector2(0.16, 0.82), Vector2(0.84, 0.82)]:
+        draw_circle(rect.position + rect.size * corner, 1.0, Color(1.0, 1.0, 1.0, 0.46 - damage * 0.18))
+
+    var stages := brick.max_hp - brick.hp
+    if stages <= 0:
+        return
+    var cracks: Array = [
+        PackedVector2Array([Vector2(0.22, 0.08), Vector2(0.46, 0.50), Vector2(0.38, 0.94)]),
+        PackedVector2Array([Vector2(0.78, 0.10), Vector2(0.58, 0.44), Vector2(0.72, 0.90)]),
+        PackedVector2Array([Vector2(0.08, 0.62), Vector2(0.48, 0.56), Vector2(0.92, 0.46)]),
+        PackedVector2Array([Vector2(0.50, 0.04), Vector2(0.44, 0.38), Vector2(0.56, 0.72)]),
+    ]
+    var count := mini(stages, cracks.size())
+    var crack_color := Color(0.02, 0.02, 0.05, 0.70)
+    for index in range(count):
+        var points: PackedVector2Array = cracks[index]
+        var p0 := rect.position + rect.size * points[0]
+        var p1 := rect.position + rect.size * points[1]
+        var p2 := rect.position + rect.size * points[2]
+        draw_line(p0, p1, crack_color, 1.2, true)
+        draw_line(p1, p2, crack_color, 1.2, true)
+
+    if brick.hp == 1:
+        draw_rect(rect.grow(0.5), Color(1.0, 0.92, 0.58, 0.72), false, 1.2)
 
 
 func draw_walls() -> void:
@@ -225,20 +266,30 @@ func draw_particles() -> void:
 
 
 func draw_paddle() -> void:
-    var half := config.paddle_width * 0.5
-    var rect := Rect2(world.paddle_x - half, config.paddle_y - config.paddle_height * 0.5, config.paddle_width, config.paddle_height)
+    var half := world.paddle_width * 0.5
+    var rect := Rect2(world.paddle_x - half, config.paddle_y - config.paddle_height * 0.5, world.paddle_width, config.paddle_height)
     var fire := world.is_fire_active()
-    var color := ORANGE if fire else CYAN
+    var max_extra := maxf(world.paddle_max_width() - config.paddle_width, 1.0)
+    var extra := maxf(world.paddle_width - config.paddle_width, 0.0)
+    var upgrade := clampf(sqrt(extra / max_extra), 0.0, 1.0)
+    var color := (ORANGE if fire else CYAN).lerp(Color.WHITE, upgrade * 0.5)
     draw_rect(rect.grow(14.0), Color(color.r, color.g, color.b, 0.028), true)
     draw_rect(rect.grow(7.0), Color(color.r, color.g, color.b, 0.070), true)
-    var body := Color("#ffb04f") if fire else Color("#54e4e6")
+    var body := Color("#ffb04f") if fire else Color("#54e4e6").lerp(Color("#f2ffff"), upgrade)
+    if fire:
+        body = body.lerp(Color.WHITE, upgrade * 0.35)
+    body = body.lerp(Color.WHITE, world.paddle_flash * 0.5)
     draw_rect(Rect2(rect.position.x + config.paddle_height * 0.5, rect.position.y, rect.size.x - config.paddle_height, rect.size.y), body, true)
     draw_circle(Vector2(rect.position.x + config.paddle_height * 0.5, rect.get_center().y), config.paddle_height * 0.5, body)
     draw_circle(Vector2(rect.end.x - config.paddle_height * 0.5, rect.get_center().y), config.paddle_height * 0.5, body)
-    draw_rect(Rect2(rect.position.x + 8.0, rect.position.y + 2.0, rect.size.x - 16.0, 2.0), Color(0.92, 1.0, 1.0, 0.92), true)
+    draw_rect(Rect2(rect.position.x + 8.0, rect.position.y + 2.0, rect.size.x - 16.0, 2.0), Color(0.92, 1.0, 1.0, 0.92).lerp(Color.WHITE, upgrade * 0.5), true)
     draw_rect(Rect2(rect.position.x + 12.0, rect.position.y + 6.0, rect.size.x - 24.0, 2.0), Color(color.r, color.g, color.b, 0.48), true)
     draw_line(Vector2(world.paddle_x - 18.0, rect.end.y + 1.0), Vector2(world.paddle_x + 18.0, rect.end.y + 1.0), Color(1.0, 1.0, 1.0, 0.60), 1.2, true)
     draw_line(Vector2(world.paddle_x - 26.0, rect.end.y + 5.0), Vector2(world.paddle_x + 26.0, rect.end.y + 5.0), Color(color.r, color.g, color.b, 0.18), 2.0, true)
+    if world.paddle_flash > 0.01:
+        var pulse := world.paddle_flash
+        draw_rect(rect.grow(10.0 + (1.0 - pulse) * 24.0), Color(color.r, color.g, color.b, 0.28 * pulse), false, 2.0)
+        draw_rect(rect.grow(4.0 + (1.0 - pulse) * 10.0), Color(1.0, 1.0, 1.0, 0.14 * pulse), false, 1.0)
 
 
 func draw_balls() -> void:

@@ -181,6 +181,13 @@ static func _parse_setting(
                     push_warning("Ignored color setting with invalid color: %s" % line)
                 else:
                     symbol_colors[symbol] = color
+            elif lower_key.begins_with("hp.") and key.length() > 3:
+                var symbol := key.substr(3)
+                var hp := value.to_int()
+                if hp < 1:
+                    push_warning("Ignored hp setting, expected a positive integer: %s" % line)
+                else:
+                    definition.brick_hp[symbol] = hp
             else:
                 push_warning("Ignored unknown level setting: %s" % key)
 

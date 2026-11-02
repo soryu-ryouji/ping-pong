@@ -13,6 +13,7 @@ func _ready() -> void:
     sounds[GameEvent.Type.WALL_HIT] = synth_sound(210.0, 0.055, 0.20, 0.05, 2.6)
     sounds[GameEvent.Type.PADDLE_HIT] = synth_sound(360.0, 0.12, 0.30, 0.08, 1.4)
     sounds[GameEvent.Type.BALL_LOST] = synth_sound(150.0, 0.42, 0.28, 0.16, 0.8)
+    sounds[GameEvent.Type.BRICK_HIT] = synth_sound(520.0, 0.065, 0.26, 0.14, 2.1)
     sounds[GameEvent.Type.BRICK_DESTROYED] = synth_sound(760.0, 0.085, 0.34, 0.20, 1.9)
     sounds[GameEvent.Type.FIRE_STARTED] = synth_sound(260.0, 0.65, 0.26, 0.46, 0.55)
     sounds[GameEvent.Type.LEVEL_CLEARED] = synth_sound(980.0, 0.5, 0.24, 0.02, 0.7)
@@ -36,6 +37,8 @@ func handle_event(event: GameEvent) -> void:
             play_sound(event.type, -7.0, rng.randf_range(1.02, 1.13))
         GameEvent.Type.BALL_LOST:
             play_sound(event.type, -5.0, rng.randf_range(0.92, 1.02))
+        GameEvent.Type.BRICK_HIT:
+            play_sound(event.type, -15.0, rng.randf_range(0.86, 1.02))
         GameEvent.Type.BRICK_DESTROYED:
             play_sound(event.type, -12.0, rng.randf_range(0.88, 1.18))
         GameEvent.Type.FIRE_STARTED:

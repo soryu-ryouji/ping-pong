@@ -36,7 +36,14 @@ const LOWER_END := 122
 @export_range(0.0, 1.0) var random_carve_chance := 0.0
 @export var grid: PackedStringArray = []
 @export var symbol_colors: Dictionary = {}
+@export var brick_hp: Dictionary = {}
 @export var walls: Array[Rect2] = []
+
+
+func brick_wall_width() -> float:
+    if columns <= 0:
+        return 0.0
+    return float(columns - 1) * brick_step.x + brick_size.x
 
 
 static func palette_color(symbol: String) -> Color:

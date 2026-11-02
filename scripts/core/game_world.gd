@@ -37,6 +37,8 @@ var game_time := 0.0
 var paddle_x := 360.0
 var paddle_target_x := 360.0
 var paddle_velocity := 0.0
+var paddle_width := 116.0
+var paddle_flash := 0.0
 var balls: Array[BallData] = []
 var bricks: Array[BrickData] = []
 var walls: Array[Rect2] = []
@@ -48,6 +50,8 @@ var powerup_drop_counter := 0
 func _init(game_config: GameConfig) -> void:
     config = game_config
     rng.seed = config.random_seed
+    paddle_width = config.paddle_width
+    paddle_flash = 0.0
     levels = LevelLoader.load_manifest(config.level_manifest, config)
 
 
@@ -66,6 +70,8 @@ func reset_run() -> void:
     fire_time = 0.0
     game_time = 0.0
     state_timer = 0.0
+    paddle_width = config.paddle_width
+    paddle_flash = 0.0
     state = State.READY
     reset_ball_state()
     events.clear()
@@ -84,6 +90,9 @@ func build_level() -> void:
         return
     bricks = LevelGenerator.generate(definition, rng)
     walls = definition.walls.duplicate()
+    paddle_width = minf(paddle_width, paddle_max_width())
+    paddle_target_x = _clamp_paddle_x(paddle_target_x)
+    paddle_x = _clamp_paddle_x(paddle_x)
     total_bricks = maxi(bricks.size(), 1)
     remaining_bricks = 0
     for brick in bricks:
@@ -182,6 +191,7 @@ func primary_action() -> void:
 
 func step(delta: float) -> void:
     game_time += delta
+    paddle_flash = maxf(0.0, paddle_flash - delta * 3.0)
     update_paddle(delta)
 
     if state == State.PLAYING:
@@ -209,35 +219,34 @@ func step(delta: float) -> void:
 
 
 func set_paddle_target(screen_x: float) -> void:
-    var half_width := config.paddle_width * 0.5
-    paddle_target_x = clampf(
-        screen_x,
-        config.inner_left + half_width + 5.0,
-        config.inner_right - half_width - 5.0
-    )
+    paddle_target_x = _clamp_paddle_x(screen_x)
 
 
 func nudge_paddle(direction: float, delta: float) -> void:
     if absf(direction) <= 0.01:
         return
-    var half_width := config.paddle_width * 0.5
-    paddle_target_x = clampf(
-        paddle_target_x + direction * 760.0 * delta,
-        config.inner_left + half_width + 5.0,
-        config.inner_right - half_width - 5.0
-    )
+    paddle_target_x = _clamp_paddle_x(paddle_target_x + direction * paddle_move_speed() * delta)
+
+
+func _clamp_paddle_x(value: float) -> float:
+    var half_width := paddle_width * 0.5
+    var min_x := config.inner_left + half_width + 5.0
+    var max_x := config.inner_right - half_width - 5.0
+    if min_x > max_x:
+        return (config.inner_left + config.inner_right) * 0.5
+    return clampf(value, min_x, max_x)
 
 
 func update_paddle(delta: float) -> void:
     var previous := paddle_x
-    paddle_x = lerpf(paddle_x, paddle_target_x, 1.0 - exp(-18.0 * delta))
+    paddle_x = move_toward(paddle_x, paddle_target_x, paddle_move_speed() * delta)
     paddle_velocity = (paddle_x - previous) / maxf(delta, 0.0001)
 
 
 func launch_ball(extra: bool) -> void:
     if balls.size() >= config.maximum_launch_balls:
         return
-    var speed := config.base_ball_speed + float(wave - 1) * config.wave_speed_increment
+    var speed := minf(config.base_ball_speed + float(wave - 1) * config.wave_speed_increment, config.max_ball_speed)
     var angle := rng.randf_range(0.42, 0.74) * (1.0 if rng.randf() > 0.5 else -1.0)
     if extra:
         speed += 28.0
@@ -246,8 +255,17 @@ func launch_ball(extra: bool) -> void:
     ball.position = Vector2(paddle_x, config.paddle_y - 28.0)
     ball.velocity = Vector2(sin(angle), -cos(angle)) * speed
     ball.spin = rng.randf_range(-1.0, 1.0)
+    ball.stuck_reference = ball.position
     balls.append(ball)
     emit_event(GameEvent.Type.BALL_LAUNCHED, ball.position, CYAN_SOFT)
+
+
+func boost_ball_speed(ball: BallData, amount: float) -> void:
+    var speed := ball.velocity.length()
+    if speed <= 0.001:
+        return
+    var target := minf(speed + amount, config.max_ball_speed)
+    ball.velocity = ball.velocity.normalized() * target
 
 
 func update_balls(delta: float) -> void:
@@ -260,6 +278,7 @@ func update_balls(delta: float) -> void:
             lost_count += 1
             combo = 0
             next_multiball_at = config.combo_first_multiball
+            _shrink_paddle_after_loss()
             emit_event(GameEvent.Type.BALL_LOST, lost_position, DANGER)
             add_message(lost_position, "BALL LOST", DANGER, 18, 0.9)
             if balls.is_empty():
@@ -275,6 +294,50 @@ func update_balls(delta: float) -> void:
             ball.trail.append(ball.position)
             while ball.trail.size() > 15:
                 ball.trail.remove_at(0)
+            ball.stuck_check += delta
+            if ball.stuck_check >= 0.5:
+                if ball.position.distance_squared_to(ball.stuck_reference) < 196.0:
+                    ball.stuck_time += ball.stuck_check
+                else:
+                    ball.stuck_time = 0.0
+                    ball.stuck_reference = ball.position
+                ball.stuck_check = 0.0
+            if ball.stuck_time >= 1.5:
+                _rescue_stuck_ball(ball)
+
+
+func _rescue_stuck_ball(ball: BallData) -> void:
+    var speed := minf(maxf(ball.velocity.length(), config.base_ball_speed), config.max_ball_speed)
+    var angle := rng.randf_range(-0.68, 0.68)
+    var x := clampf(
+        ball.position.x,
+        config.inner_left + ball.radius + 4.0,
+        config.inner_right - ball.radius - 4.0
+    )
+    ball.position = Vector2(x, config.paddle_y - 24.0)
+    ball.velocity = Vector2(sin(angle), -cos(angle)) * speed
+    ball.trail.clear()
+    ball.stuck_time = 0.0
+    ball.stuck_check = 0.0
+    ball.stuck_reference = ball.position
+    add_message(ball.position, "BALL RESCUE", CYAN, 14, 0.7)
+
+
+func _shrink_paddle_after_loss() -> void:
+    var extra := maxf(0.0, paddle_width - config.paddle_width)
+    if extra <= 0.0:
+        return
+    var lost_width := extra * 2.0 / 3.0
+    paddle_width = maxf(config.paddle_width, paddle_width - lost_width)
+    paddle_target_x = _clamp_paddle_x(paddle_target_x)
+    paddle_x = _clamp_paddle_x(paddle_x)
+    add_message(
+        Vector2(paddle_x, config.paddle_y - 70.0),
+        "WIDTH -%d" % int(round(lost_width)),
+        DANGER,
+        14,
+        0.6
+    )
 
 
 func try_drop_powerup(center: Vector2, fire: bool) -> void:
@@ -332,7 +395,7 @@ func update_powerups(delta: float) -> void:
             powerups.remove_at(index)
             continue
         if item.position.y >= config.paddle_y - 24.0 and item.position.y <= config.paddle_y + 18.0:
-            if absf(item.position.x - paddle_x) <= config.paddle_width * 0.5 + 14.0:
+            if absf(item.position.x - paddle_x) <= paddle_width * 0.5 + 14.0:
                 collect_powerup(item)
                 powerups.remove_at(index)
 
@@ -348,15 +411,41 @@ func on_wall_hit(hit_position: Vector2) -> void:
 
 
 func on_paddle_hit(hit_position: Vector2) -> void:
-    emit_event(GameEvent.Type.PADDLE_HIT, hit_position, CYAN)
-    add_message(hit_position + Vector2(0.0, -20.0), "+SPEED", CYAN_SOFT, 13, 0.42)
+    var old_width := paddle_width
+    paddle_width = minf(paddle_width + config.paddle_grow_per_hit, paddle_max_width())
+    paddle_flash = 1.0
+    paddle_target_x = _clamp_paddle_x(paddle_target_x)
+    paddle_x = _clamp_paddle_x(paddle_x)
+    var event := emit_event(GameEvent.Type.PADDLE_HIT, hit_position, CYAN)
+    event.value = paddle_width
+    var gained := paddle_width - old_width
+    var label := "WIDTH +%d" % int(round(gained))
+    if gained < 0.01:
+        label = "WIDTH MAX"
+    add_message(hit_position + Vector2(0.0, -20.0), label, CYAN_SOFT, 13, 0.42)
+
+
+func hit_brick(brick: BrickData, damage := 1) -> bool:
+    if not brick.alive:
+        return false
+    brick.hp = maxi(0, brick.hp - maxi(damage, 1))
+    brick.flash = 1.0
+    brick.shake = 1.0
+    if brick.hp > 0:
+        var event := emit_event(GameEvent.Type.BRICK_HIT, brick.rect.get_center(), brick.color)
+        event.value = brick.hp
+        return false
+    destroy_brick(brick)
+    return true
 
 
 func destroy_brick(brick: BrickData) -> void:
     if not brick.alive:
         return
     brick.alive = false
+    brick.hp = 0
     brick.flash = 1.0
+    brick.shake = 1.0
     remaining_bricks -= 1
 
     var center := brick.rect.get_center()
@@ -411,6 +500,21 @@ func clear_level() -> void:
     add_message(Vector2(config.screen_size.x * 0.5, 376.0), "+25 BONUS", GOLD, 20, 1.4)
 
 
+func paddle_max_width() -> float:
+    var inner_width := config.inner_right - config.inner_left
+    var level := current_level()
+    if level == null:
+        return inner_width
+    return minf(level.brick_wall_width(), inner_width)
+
+
+func paddle_move_speed() -> float:
+    var max_extra := maxf(paddle_max_width() - config.paddle_width, 1.0)
+    var extra := maxf(paddle_width - config.paddle_width, 0.0)
+    var growth := clampf(extra / max_extra, 0.0, 1.0)
+    return lerpf(config.paddle_base_move_speed, config.paddle_min_move_speed, growth)
+
+
 func current_level() -> LevelDefinition:
     if levels.is_empty() or level_index < 0 or level_index >= levels.size():
         return null
@@ -431,6 +535,8 @@ func update_bricks(delta: float) -> void:
     for brick in bricks:
         if brick.flash > 0.0:
             brick.flash = maxf(0.0, brick.flash - delta * 5.0)
+        if brick.shake > 0.0:
+            brick.shake = maxf(0.0, brick.shake - delta * 8.0)
 
 
 func is_fire_active() -> bool:

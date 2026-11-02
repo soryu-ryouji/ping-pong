@@ -15,11 +15,16 @@ extends Resource
 @export var paddle_y := 824.0
 @export var paddle_width := 116.0
 @export var paddle_height := 14.0
+@export var paddle_grow_per_hit := 10.0
+@export var paddle_base_move_speed := 760.0
+@export var paddle_min_move_speed := 580.0
 
 @export var initial_lives := 5
 @export var random_seed := 0x5EEDC0DE
 @export var base_ball_speed := 470.0
 @export var wave_speed_increment := 18.0
+@export var bounce_speed_increment := 1.5
+@export var max_ball_speed := 1410.0
 @export var maximum_launch_balls := 7
 @export var combo_multiball_limit := 6
 @export var combo_first_multiball := 30
