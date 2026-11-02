@@ -22,6 +22,10 @@ static func load_manifest(manifest_path: String) -> Array[LevelDefinition]:
         var level_path := line
         if not level_path.begins_with("res://") and not level_path.begins_with("user://"):
             level_path = base_dir.path_join(level_path)
+        if not FileAccess.file_exists(level_path) and level_path.get_extension().is_empty():
+            var with_extension := level_path + ".txt"
+            if FileAccess.file_exists(with_extension):
+                level_path = with_extension
         var definition := load_definition(level_path)
         if definition != null:
             result.append(definition)
@@ -44,6 +48,7 @@ static func load_definition(path: String) -> LevelDefinition:
     var grid_lines: PackedStringArray = []
     var symbol_colors := {}
     var walls: Array[Rect2] = []
+    var thin_cells := {}
     var brick_symbols := 0
     var in_grid := false
 
@@ -82,14 +87,18 @@ static func load_definition(path: String) -> LevelDefinition:
                     definition.brick_origin + Vector2(column, row) * definition.brick_step,
                     definition.brick_size
                 ))
+            elif symbol == "+":
+                thin_cells[Vector2i(column, row)] = true
+    _append_thin_walls(definition, thin_cells, walls)
     definition.walls = walls
 
     var playable_bricks := 0
     for row in range(definition.rows):
         for column in range(definition.columns):
             var symbol := _symbol_at(grid_lines[row], column)
-            if symbol == "." or symbol == " " or symbol == "X" or symbol == "=":
+            if symbol == "." or symbol == " " or symbol == "X" or symbol == "=" or symbol == "+":
                 continue
+            definition.brick_rows = maxi(definition.brick_rows, row + 1)
             brick_symbols += 1
             var rect := Rect2(
                 definition.brick_origin + Vector2(column, row) * definition.brick_step,
@@ -138,6 +147,8 @@ static func _parse_setting(
             definition.hue_end = value.to_float()
         "hue_jitter":
             definition.hue_jitter = value.to_float()
+        "wall_thickness":
+            definition.wall_thickness = maxf(2.0, value.to_float())
         "random_carve_chance":
             definition.random_carve_chance = clampf(value.to_float(), 0.0, 1.0)
         "wall":
@@ -196,3 +207,132 @@ static func _intersects_wall(rect: Rect2, walls: Array[Rect2]) -> bool:
         if wall.grow(3.0).intersects(rect):
             return true
     return false
+
+
+static func _append_thin_walls(
+    definition: LevelDefinition,
+    thin_cells: Dictionary,
+    walls: Array[Rect2]
+) -> void:
+    if thin_cells.is_empty():
+        return
+    var thickness := clampf(
+        definition.wall_thickness,
+        2.0,
+        minf(definition.brick_size.x, definition.brick_size.y) * 0.8
+    )
+    var half_x := definition.brick_size.x * 0.5
+    var half_y := definition.brick_size.y * 0.5
+    var gap_x := maxf(0.0, definition.brick_step.x - definition.brick_size.x)
+    var gap_y := maxf(0.0, definition.brick_step.y - definition.brick_size.y)
+    var horizontal_walls: Array[Rect2] = []
+    var vertical_walls: Array[Rect2] = []
+    var square_walls: Array[Rect2] = []
+
+    for cell: Vector2i in thin_cells.keys():
+        var cell_rect := Rect2(
+            definition.brick_origin + Vector2(cell.x, cell.y) * definition.brick_step,
+            definition.brick_size
+        )
+        var center := cell_rect.get_center()
+        var left := thin_cells.has(cell + Vector2i(-1, 0))
+        var right := thin_cells.has(cell + Vector2i(1, 0))
+        var up := thin_cells.has(cell + Vector2i(0, -1))
+        var down := thin_cells.has(cell + Vector2i(0, 1))
+        var horizontal := left or right
+        var vertical := up or down
+
+        if not horizontal and not vertical:
+            square_walls.append(Rect2(
+                center - Vector2(thickness, thickness) * 0.5,
+                Vector2(thickness, thickness)
+            ))
+            continue
+
+        if horizontal:
+            var start_x := center.x - half_x if left or not vertical else center.x
+            var end_x := center.x + half_x if right or not vertical else center.x
+            if left:
+                start_x -= gap_x * 0.5
+            if right:
+                end_x += gap_x * 0.5
+            if end_x > start_x:
+                horizontal_walls.append(Rect2(
+                    Vector2(start_x, center.y - thickness * 0.5),
+                    Vector2(end_x - start_x, thickness)
+                ))
+
+        if vertical:
+            var start_y := center.y - half_y if up or not horizontal else center.y
+            var end_y := center.y + half_y if down or not horizontal else center.y
+            if up:
+                start_y -= gap_y * 0.5
+            if down:
+                end_y += gap_y * 0.5
+            if end_y > start_y:
+                vertical_walls.append(Rect2(
+                    Vector2(center.x - thickness * 0.5, start_y),
+                    Vector2(thickness, end_y - start_y)
+                ))
+
+    walls.append_array(_merge_horizontal_walls(horizontal_walls))
+    walls.append_array(_merge_vertical_walls(vertical_walls))
+    walls.append_array(square_walls)
+
+
+static func _merge_horizontal_walls(rects: Array[Rect2]) -> Array[Rect2]:
+    if rects.is_empty():
+        return rects
+    var sorted: Array[Rect2] = rects.duplicate()
+    sorted.sort_custom(_compare_horizontal)
+    var result: Array[Rect2] = []
+    for rect in sorted:
+        if result.is_empty():
+            result.append(rect)
+            continue
+        var last: Rect2 = result[result.size() - 1]
+        if (
+            absf(last.position.y - rect.position.y) < 0.1
+            and absf(last.size.y - rect.size.y) < 0.1
+            and rect.position.x <= last.end.x + 0.1
+        ):
+            last.size.x = maxf(last.end.x, rect.end.x) - last.position.x
+            result[result.size() - 1] = last
+        else:
+            result.append(rect)
+    return result
+
+
+static func _merge_vertical_walls(rects: Array[Rect2]) -> Array[Rect2]:
+    if rects.is_empty():
+        return rects
+    var sorted: Array[Rect2] = rects.duplicate()
+    sorted.sort_custom(_compare_vertical)
+    var result: Array[Rect2] = []
+    for rect in sorted:
+        if result.is_empty():
+            result.append(rect)
+            continue
+        var last: Rect2 = result[result.size() - 1]
+        if (
+            absf(last.position.x - rect.position.x) < 0.1
+            and absf(last.size.x - rect.size.x) < 0.1
+            and rect.position.y <= last.end.y + 0.1
+        ):
+            last.size.y = maxf(last.end.y, rect.end.y) - last.position.y
+            result[result.size() - 1] = last
+        else:
+            result.append(rect)
+    return result
+
+
+static func _compare_horizontal(a: Rect2, b: Rect2) -> bool:
+    if absf(a.position.y - b.position.y) > 0.1:
+        return a.position.y < b.position.y
+    return a.position.x < b.position.x
+
+
+static func _compare_vertical(a: Rect2, b: Rect2) -> bool:
+    if absf(a.position.x - b.position.x) > 0.1:
+        return a.position.x < b.position.x
+    return a.position.y < b.position.y

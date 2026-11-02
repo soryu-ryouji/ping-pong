@@ -29,17 +29,31 @@ func test_manifest_and_parse() -> void:
     check(labyrinth != null, "Labyrinth sample should load")
     if labyrinth != null:
         check(labyrinth.display_name == "Labyrinth", "Labyrinth name mismatch")
-        check(labyrinth.walls.size() == 12, "Expected 12 freeform walls in Labyrinth")
-        if not labyrinth.walls.is_empty():
-            check(labyrinth.walls[0] == Rect2(166, 276, 12, 76), "Freeform wall parse mismatch")
+        check(labyrinth.walls.size() > 0, "Labyrinth should have walls")
+        check(labyrinth.wall_thickness == 12.0, "Labyrinth wall thickness mismatch")
+        var thin_found := false
+        for wall in labyrinth.walls:
+            if is_equal_approx(minf(wall.size.x, wall.size.y), labyrinth.wall_thickness):
+                thin_found = true
+                break
+        check(thin_found, "Labyrinth should generate thin + walls")
 
     var corridors := LevelLoader.load_definition("res://resources/levels/02_corridors.txt")
     check(corridors != null, "Corridors sample should load")
     if corridors != null:
-        check(corridors.walls.size() > 0, "Corridors should parse X cells as walls")
+        check(corridors.walls.size() > 0, "Corridors should parse + cells as walls")
         check(corridors.symbol_colors.has("2"), "Corridors should parse color.2")
         if corridors.symbol_colors.has("2"):
             check(corridors.symbol_colors["2"] == Color("#ff6b6b"), "Corridors color.2 mismatch")
+        var horizontal_run := false
+        var vertical_run := false
+        for wall in corridors.walls:
+            if is_equal_approx(wall.size.x, 151.0) and is_equal_approx(wall.size.y, 12.0):
+                horizontal_run = true
+            if is_equal_approx(wall.size.x, 12.0) and is_equal_approx(wall.size.y, 81.0):
+                vertical_run = true
+        check(horizontal_run, "Corridors horizontal + run should merge into one wall")
+        check(vertical_run, "Corridors vertical + run should merge into one wall")
 
 
 func test_generation() -> void:

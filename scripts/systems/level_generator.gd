@@ -13,7 +13,7 @@ static func generate(definition: LevelDefinition, rng: RandomNumberGenerator) ->
             if column >= line.length():
                 continue
             var symbol := line[column]
-            if symbol == "." or symbol == " " or symbol == "X" or symbol == "=":
+            if symbol == "." or symbol == " " or symbol == "X" or symbol == "=" or symbol == "+":
                 continue
             if definition.random_carve_chance > 0.0 and rng.randf() < definition.random_carve_chance:
                 continue
@@ -44,7 +44,7 @@ static func _brick_color(
         var hue := lerpf(
             definition.hue_start,
             definition.hue_end,
-            float(row) / float(maxi(definition.rows - 1, 1))
+            float(row) / float(maxi(definition.brick_rows - 1, 1))
         )
         hue = fmod(hue + rng.randf_range(-definition.hue_jitter, definition.hue_jitter) + 1.0, 1.0)
         return Color.from_hsv(hue, 0.72, 0.93)
