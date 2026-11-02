@@ -9,6 +9,13 @@ func _initialize() -> void:
     test_wave_and_fire_state()
     test_level_cycle()
     test_debug_level_navigation()
+    test_paddle_growth()
+    test_paddle_move_speed()
+    test_ball_bounce_speed_cap()
+    test_paddle_shrink_on_loss()
+    test_wall_penetration_resolution()
+    test_stuck_ball_rescue()
+    test_brick_hit_stages()
     quit(1 if failures > 0 else 0)
 
 
@@ -132,6 +139,135 @@ func test_debug_level_navigation() -> void:
     input.handle_event(restart_key, world)
     check(world.state == GameWorld.State.READY, "Shift+R should restart the current level")
     check(world.balls.is_empty(), "Shift+R should clear active balls")
+
+
+func test_paddle_growth() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    var max_width := world.paddle_max_width()
+    check(is_equal_approx(world.paddle_width, config.paddle_width), "Paddle should start at base width")
+    check(max_width > config.paddle_width, "Brick wall should allow some paddle growth")
+    world.on_paddle_hit(Vector2(world.paddle_x, config.paddle_y))
+    check(
+        is_equal_approx(world.paddle_width, config.paddle_width + config.paddle_grow_per_hit),
+        "Paddle should grow by the configured amount after a hit"
+    )
+    for index in range(200):
+        world.on_paddle_hit(Vector2(world.paddle_x, config.paddle_y))
+    check(
+        is_equal_approx(world.paddle_width, max_width),
+        "Paddle width should cap at the brick wall width"
+    )
+    check(world.paddle_flash > 0.0, "Paddle hit should trigger the upgrade flash")
+    world.reset_run()
+    check(is_equal_approx(world.paddle_width, config.paddle_width), "Run reset should restore base paddle width")
+    check(world.paddle_flash == 0.0, "Run reset should clear paddle flash")
+
+
+func test_paddle_move_speed() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    var base_speed := world.paddle_move_speed()
+    check(is_equal_approx(base_speed, config.paddle_base_move_speed), "Paddle should start at base move speed")
+    world.paddle_width = world.paddle_max_width()
+    var wide_speed := world.paddle_move_speed()
+    check(wide_speed < base_speed, "Wide paddle should move slower")
+    check(is_equal_approx(wide_speed, config.paddle_min_move_speed), "Wide paddle should reach minimum move speed")
+    world.paddle_width = config.paddle_width
+    check(
+        is_equal_approx(world.paddle_move_speed(), base_speed),
+        "Shrinking paddle should restore base move speed"
+    )
+
+
+func test_ball_bounce_speed_cap() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    check(
+        is_equal_approx(config.max_ball_speed, config.base_ball_speed * 3.0),
+        "Maximum ball speed should be three times the base speed"
+    )
+    var ball := BallData.new()
+    ball.velocity = Vector2(config.base_ball_speed, 0.0)
+    var before := ball.velocity.length()
+    world.boost_ball_speed(ball, config.bounce_speed_increment)
+    check(ball.velocity.length() > before, "Bounce should increase ball speed")
+    for index in range(1000):
+        world.boost_ball_speed(ball, config.bounce_speed_increment)
+    check(
+        is_equal_approx(ball.velocity.length(), config.max_ball_speed),
+        "Bounce speed should stop at the configured maximum"
+    )
+
+
+func test_paddle_shrink_on_loss() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    world.paddle_width = 200.0
+    var speed_before := world.paddle_move_speed()
+    var ball := BallData.new()
+    ball.position = Vector2(world.paddle_x, config.field_bottom + 40.0)
+    ball.velocity = Vector2(0.0, 100.0)
+    world.balls.append(ball)
+    world.state = GameWorld.State.PLAYING
+    world.step(0.016)
+    var expected := config.paddle_width + (200.0 - config.paddle_width) / 3.0
+    check(is_equal_approx(world.paddle_width, expected), "Ball loss should remove two thirds of extra paddle width")
+    check(world.paddle_move_speed() > speed_before, "Ball loss shrink should restore some paddle move speed")
+
+
+func test_stuck_ball_rescue() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    var ball := BallData.new()
+    ball.position = Vector2(360.0, 400.0)
+    ball.velocity = Vector2.ZERO
+    ball.stuck_reference = ball.position
+    ball.stuck_time = 2.0
+    ball.stuck_check = 0.5
+    world.balls.append(ball)
+    world.state = GameWorld.State.PLAYING
+    world.step(0.016)
+    check(ball.position.y > 700.0, "Stuck ball should be moved back near the paddle")
+    check(ball.velocity.y < 0.0, "Stuck ball should be relaunched upward")
+
+
+func test_wall_penetration_resolution() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    world.walls.clear()
+    world.walls.append(Rect2(300.0, 300.0, 20.0, 20.0))
+    var ball := BallData.new()
+    ball.position = Vector2(310.0, 310.0)
+    ball.velocity = Vector2(100.0, 0.0)
+    var before_speed := ball.velocity.length()
+    world.collision.collide_walls(world, ball)
+    check(not world.walls[0].has_point(ball.position), "Wall collision should push the ball out")
+    check(ball.velocity.length() > before_speed, "Wall bounce should increase ball speed")
+
+
+func test_brick_hit_stages() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    var brick := BrickData.new()
+    brick.max_hp = 3
+    brick.hp = 3
+    brick.color = Color.GREEN
+
+    check(not world.hit_brick(brick, 1), "Three-HP brick should survive the first hit")
+    check(brick.hp == 2, "Three-HP brick should drop to two HP")
+    check(brick.shake > 0.0, "Brick hit should start shake")
+    check(not world.hit_brick(brick, 1), "Three-HP brick should survive the second hit")
+    check(brick.hp == 1, "Three-HP brick should drop to one HP")
+    check(world.hit_brick(brick, 1), "Three-HP brick should break on the third hit")
+    check(not brick.alive, "Broken brick should no longer be alive")
 
 
 func check(condition: bool, message: String) -> void:

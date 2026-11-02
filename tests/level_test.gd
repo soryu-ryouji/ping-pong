@@ -7,6 +7,7 @@ func _initialize() -> void:
     test_manifest_and_parse()
     test_generation()
     test_auto_layout()
+    test_brick_hp()
     if failures == 0:
         print("LEVEL TEST PASS")
     quit(1 if failures > 0 else 0)
@@ -127,6 +128,30 @@ func test_auto_layout() -> void:
     if labyrinth != null:
         check(is_equal_approx(labyrinth.brick_size.x, 34.0), "Standard-width Level should not scale")
         check(is_equal_approx(labyrinth.brick_size.y, 23.0), "Standard-height Level should not scale")
+
+
+func test_brick_hp() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var armor := LevelLoader.load_definition("res://tests/fixtures/armor_level.txt", config)
+    check(armor != null, "Armor fixture should load")
+    if armor == null:
+        return
+    check(armor.brick_hp.get("8") == 3, "Armor fixture hp.8 mismatch")
+    check(armor.brick_hp.get("5") == 2, "Armor fixture hp.5 mismatch")
+
+    var rng := RandomNumberGenerator.new()
+    rng.seed = 99
+    var found_three := false
+    var found_two := false
+    for brick in LevelGenerator.generate(armor, rng):
+        if brick.max_hp == 3:
+            found_three = true
+            check(brick.hp == 3, "Three-HP brick should start at full HP")
+        elif brick.max_hp == 2:
+            found_two = true
+            check(brick.hp == 2, "Two-HP brick should start at full HP")
+    check(found_three, "Armor fixture should generate a three-HP brick")
+    check(found_two, "Armor fixture should generate a two-HP brick")
 
 
 func check(condition: bool, message: String) -> void:

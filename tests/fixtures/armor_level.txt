@@ -1,0 +1,8 @@
+// Test fixture: multi-hit brick symbols.
+name = Armor Fixture
+hp.8 = 3
+hp.5 = 2
+
+grid:
+.8.5.
+.....
