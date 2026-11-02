@@ -40,7 +40,11 @@ GameRenderer       GameEffects   GameAudioManager
 
 挡板移动由 `paddle_move_speed()` 控制：按当前扩展量在 `paddle_base_move_speed` 和 `paddle_min_move_speed` 之间插值，`update_paddle()` 用限速移动代替固定插值，所以变宽后更考验预判，缩回后速度恢复。经验曲线由 `xp_base_gain`、`xp_combo_scale`、`xp_required_base` 和 `xp_required_growth` 控制。`breakable_wall_hp` 和 `breakable_wall_min_speed` 控制 `+` 墙的耐久与速度门槛。
 
-小球每次墙面、障碍或砖块反弹都会调用 `boost_ball_speed()`，增加 `bounce_speed_increment`，反弹加速受 `max_ball_speed = 1410`（初始速度的 3 倍）限制；如果球已经被 SPEED 道具推过上限，反弹不会把速度降回去。SPEED 道具本身不再设置上限，会持续按倍率加速。
+小球每次墙面、障碍或砖块反弹都会调用 `boost_ball_speed()`，增加 `bounce_speed_increment`（当前 `7`），反弹加速受 `max_ball_speed = 5000`限制；如果球已经被 SPEED 道具推过上限，反弹不会把速度降回去。SPEED 道具本身不再设置上限，会持续按倍率加速。
+
+`ball_speed_color()` 按 `breakable_wall_min_speed` 的比例返回四色：低于 55% 为蓝，55%–78% 为黄，78%–100% 为橙，达到 100% 为红。当前阈值分别是 `495 / 702 / 900`，所以红色球速才能击碎 `+` 墙；FIRE RUSH 保留球速颜色，只额外叠加橙色光晕。
+
+`ball_speed_intensity()` 计算红色阈值以上的归一化强度，`ball_visual_scale()` 在红色阈值之后每 `100` 速度放大 `0.3x`，视觉倍率最高 `2.5x`；`ball_visual_color()` 把红色继续向白色提亮。这个缩放只作用于绘制，`ball.radius` 的碰撞半径保持不变，避免高速球被挤进墙体。
 
 关卡布局保存在 `resources/levels/*.txt`，格式见 [levels.md](levels.md)。`GameWorld` 启动时用 `LevelLoader` 读取清单，运行时保存 `levels: Array[LevelDefinition]`、`level_index` 和 `loop_count`。
 
@@ -89,13 +93,13 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 
 完整格式、符号表和编关流程见 [levels.md](levels.md)。`LevelLoader` 会先根据网格列数、砖块行数和 `GameConfig` 的可用区域做自动布局：默认 fit 模式按需统一缩放并水平居中；关卡写 `fill_field = true` 时改为按列数/总行数铺满可用区域；`auto_layout = false` 时保留手动 `origin` / `brick_size` / `step`。然后把 `X` / `=` 转成静态整格墙，把 `+` 按上下左右邻居拆成可破坏细墙段和连接段。`LevelGenerator` 只处理砖块符号：数字 `1`-`9` 默认 HP 等于数字，其他符号默认 1，`LevelDefinition.brick_hp` 可覆盖。
 
-`GameWorld.build_level()` 每次从当前 `LevelDefinition` 生成砖块和墙；清关倒计时结束后 `next_level()` 推进 `level_index`，越过末尾时回到 `0` 并增加 `loop_count`。`wave` 是全局难度计数，持续增长并影响基础球速。
+`GameWorld.build_level()` 每次从当前 `LevelDefinition` 生成砖块和墙；清关后进入等待确认状态，球继续在背景模拟，玩家点击/空格触发 `next_level()`，越过末尾时回到 `0` 并增加 `loop_count`。`wave` 是全局难度计数，持续增长并影响基础球速。
 
 碰撞到多段耐久砖时，`CollisionSystem` 调用 `GameWorld.hit_brick()`。未击碎时砖块进入 `shake` 状态并发出 `BRICK_HIT`；击碎时才进入 `destroy_brick()`，结算 FIRE、道具和清除进度。FIRE RUSH 传入高伤害，直接击碎。
 
-`+` 墙由 `BreakableWallData` 表示，`collide_breakable_walls()` 负责反弹和检测球速。只有球速达到 `breakable_wall_min_speed` 时，`hit_breakable_wall()` 才会扣除 1 点 HP；HP 归零后墙段消失。低速碰撞只反弹并轻微震动，不扣血。`remaining_bricks` 和 `remaining_breakable_walls` 同时归零才会触发 `clear_level()`，`clear_fraction` 也按两者总数计算。
+`+` 墙由 `BreakableWallData` 表示，`collide_breakable_walls()` 负责反弹和检测球速。只有球速达到 `breakable_wall_min_speed` 时，`hit_breakable_wall()` 才会扣除 1 点 HP；HP 归零后墙段消失。低速碰撞只反弹并轻微震动，不扣血。清关只看 `remaining_bricks`，`clear_fraction` 也按砖块计算；但 `CLEARED` 状态下仍会继续更新小球和可破坏墙，所以玩家等待确认时可以继续撞碎 `+` 墙。
 
-`on_paddle_hit()` 增加接球 COMBO，并发出 `COMBO_POP` 让右上角数字弹跳/抖动；同时按当前 COMBO 调用 `add_xp()`。达到 `combo_first_life_reward` 和后续 `combo_life_reward_interval` 时，同样调用 `apply_level_up_reward()` 发放奖励，不再生成额外小球。满 XP 条后 `xp_required` 按 `xp_required_growth` 增长，发出 `XP_LEVEL_UP`，并调用 `apply_level_up_reward()`。当前 `GameConfig.level_up_reward` 指向 `ExtraLifeReward`，奖励 `+1 LIFE`；`UpgradeReward` 是可继承的资源接口，后续技能选择只需替换或传入选中的 reward。`double_balls()` 只由 MULTI 道具使用。破砖不增加 COMBO 或 XP。
+`on_paddle_hit()` 增加接球 COMBO，并发出 `COMBO_POP` 让右上角数字弹跳/抖动；同时按当前 COMBO 调用 `add_xp()`。达到 `combo_first_life_reward` 和后续 `combo_life_reward_interval` 时，调用 `apply_level_up_reward(reward_for_level(xp_level))` 发放当前等级奖励。满 XP 条后 `xp_required` 按 `xp_required_growth` 增长，发出 `XP_LEVEL_UP`，并按新等级调用同一套奖励。`GameConfig.level_up_rewards` 是有序资源列表：索引 0 是 `ExtraLifeReward`（等级 2），索引 1 是 `BallSplitReward`（等级 3+）；`reward_for_level()` 负责把等级映射到奖励。后续技能选择只需替换列表或传入选中的 reward。`double_balls()` 由 `BallSplitReward` 和 MULTI 道具共用。破砖不增加 COMBO 或 XP。
 
 若需要完全不同的生成算法，可以替换 `LevelGenerator`，或在 `LevelDefinition` 中增加字段，而不必修改碰撞或表现模块。
 
@@ -116,7 +120,7 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 
 1. 更新挡板平滑运动。
 2. `PLAYING` 下更新火焰计时、重生、道具和球。
-3. `CLEARED` 下更新关卡切换倒计时。
+3. `CLEARED` 下继续模拟小球，但不结算漏球、接球奖励或关卡推进；等待玩家确认。
 4. 更新砖块闪光状态。
 
 球按速度动态拆分子步，每步最多移动约 4.5 像素，依次处理外墙、丢球、挡板、迷宫墙和砖块。`CollisionGeometry.circle_rect_hit()` 返回 `CollisionHit` 或 `null`，包含法线和穿透深度。墙和砖块碰撞都会把球推出穿透区域（FIRE RUSH 穿透砖块时除外），避免球卡在实体内部；`update_balls()` 还跟踪每个球的位置变化，连续约 1.5 秒没有明显位移时会执行 `BALL RESCUE`，把球放回挡板上方并给一个向上初速度。
