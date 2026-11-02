@@ -8,14 +8,17 @@ func _initialize() -> void:
     test_deterministic_simulation()
     test_wave_and_fire_state()
     test_level_cycle()
+    test_level_clear_waits_for_click()
     test_debug_level_navigation()
     test_paddle_growth()
     test_paddle_move_speed()
     test_ball_bounce_speed_cap()
+    test_ball_speed_colors()
+    test_ball_visual_growth()
     test_paddle_shrink_on_loss()
     test_wall_penetration_resolution()
     test_breakable_wall_hp()
-    test_level_clear_requires_walls()
+    test_walls_break_after_clear()
     test_breakable_wall_collision_speed()
     test_speed_powerup_uncapped()
     test_stuck_ball_rescue()
@@ -80,14 +83,39 @@ func test_level_cycle() -> void:
     for step_index in range(level_count):
         world.clear_level()
         world.step(3.0)
+        check(world.state == GameWorld.State.CLEARED, "Level should wait for confirmation after clear")
+        check(
+            world.level_index == step_index % level_count,
+            "Level index should not advance before confirmation"
+        )
+        world.primary_action()
         check(
             world.level_index == (step_index + 1) % level_count,
-            "Unexpected level index after clear"
+            "Unexpected level index after confirmation"
         )
         check(world.wave == step_index + 2, "Wave counter did not advance")
 
     check(world.loop_count == 2, "Completing the last level should increment the loop count")
     check(world.current_level() != null, "Loop should return to a valid level")
+
+
+func test_level_clear_waits_for_click() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    world.primary_action()
+    var start_position := world.balls[0].position
+    var start_level := world.level_index
+    world.clear_level()
+    world.step(0.2)
+    check(world.state == GameWorld.State.CLEARED, "Level should remain in CLEARED state")
+    check(world.level_index == start_level, "Level should not advance before confirmation")
+    check(world.balls[0].position != start_position, "Balls should keep moving in the background")
+    world.primary_action()
+    check(
+        world.level_index == (start_level + 1) % world.levels.size(),
+        "Confirmation should advance to the next level"
+    )
 
 
 func test_debug_level_navigation() -> void:
@@ -193,19 +221,57 @@ func test_ball_bounce_speed_cap() -> void:
     var world := GameWorld.new(config)
     world.reset_run()
     check(
-        is_equal_approx(config.max_ball_speed, config.base_ball_speed * 3.0),
-        "Maximum ball speed should be three times the base speed"
+        is_equal_approx(config.max_ball_speed, 5000.0),
+        "Maximum ball speed should be 5000"
     )
     var ball := BallData.new()
     ball.velocity = Vector2(config.base_ball_speed, 0.0)
     var before := ball.velocity.length()
     world.boost_ball_speed(ball, config.bounce_speed_increment)
     check(ball.velocity.length() > before, "Bounce should increase ball speed")
-    for index in range(1000):
+    for index in range(2000):
         world.boost_ball_speed(ball, config.bounce_speed_increment)
     check(
         is_equal_approx(ball.velocity.length(), config.max_ball_speed),
         "Bounce speed should stop at the configured maximum"
+    )
+
+
+func test_ball_speed_colors() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    var red_threshold := config.breakable_wall_min_speed
+    check(world.ball_speed_color(0.0) == GameWorld.BLUE, "Low speed should be blue")
+    check(world.ball_speed_color(red_threshold * 0.60) == GameWorld.GOLD, "Mid speed should be yellow")
+    check(world.ball_speed_color(red_threshold * 0.85) == GameWorld.ORANGE, "High speed should be orange")
+    check(world.ball_speed_color(red_threshold) == GameWorld.DANGER, "Breakable speed should be red")
+    check(world.ball_speed_color(red_threshold * 2.0) == GameWorld.DANGER, "Over-threshold speed should stay red")
+
+
+func test_ball_visual_growth() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    var red_threshold := config.breakable_wall_min_speed
+    check(is_equal_approx(world.ball_visual_scale(red_threshold), 1.0), "Red threshold should keep base ball size")
+    check(
+        world.ball_visual_color(red_threshold) == GameWorld.DANGER,
+        "Red threshold should keep the red base color"
+    )
+    check(
+        world.ball_visual_scale(config.max_ball_speed) > world.ball_visual_scale(red_threshold),
+        "Ball should keep growing with speed above the red threshold"
+    )
+    check(
+        is_equal_approx(world.ball_visual_scale(red_threshold + 100.0), 1.3),
+        "Visual radius should grow by 0.3x per 100 speed"
+    )
+    check(
+        world.ball_visual_color(config.max_ball_speed) != GameWorld.DANGER,
+        "Ball color should brighten above the red speed threshold"
+    )
+    check(
+        is_equal_approx(world.ball_visual_scale(config.max_ball_speed), 2.5),
+        "Visual growth should cap at 2.5 times the base radius"
     )
 
 
@@ -245,7 +311,7 @@ func test_breakable_wall_hp() -> void:
     check(not wall.alive, "Breakable wall should break after 99 qualifying hits")
 
 
-func test_level_clear_requires_walls() -> void:
+func test_walls_break_after_clear() -> void:
     var config: GameConfig = load("res://resources/game_config.tres")
     var world := GameWorld.new(config)
     world.reset_run()
@@ -264,12 +330,12 @@ func test_level_clear_requires_walls() -> void:
         if brick.alive:
             world.destroy_brick(brick)
     check(world.remaining_bricks == 0, "All bricks should be cleared")
-    check(world.state != GameWorld.State.CLEARED, "Level should not clear while breakable walls remain")
+    check(world.state == GameWorld.State.CLEARED, "Level should clear when colored bricks are gone")
     for wall in world.breakable_walls:
         wall.hp = 1
         world.hit_breakable_wall(wall, config.breakable_wall_min_speed)
-    check(world.remaining_breakable_walls == 0, "All breakable walls should be cleared")
-    check(world.state == GameWorld.State.CLEARED, "Level should clear after bricks and walls are gone")
+        check(not wall.alive, "Breakable walls should still be smashable after clear")
+    check(world.state == GameWorld.State.CLEARED, "Wall destruction should not restart the level state")
 
 
 func test_breakable_wall_collision_speed() -> void:
@@ -378,16 +444,30 @@ func test_xp_level_up() -> void:
         world.xp_gain_for_combo(100) > world.xp_gain_for_combo(10),
         "Higher combo should grant more XP per hit"
     )
-    check(config.level_up_reward != null, "Game config should assign a level-up reward")
+    check(config.level_up_rewards.size() >= 2, "Game config should assign level-up rewards")
+    check(
+        config.level_up_rewards[0].id == &"extra_life",
+        "Level 2 reward should be extra life"
+    )
+    check(
+        config.level_up_rewards[1].id == &"ball_split",
+        "Level 3+ reward should be ball split"
+    )
     world.primary_action()
     var balls_before := world.balls.size()
     var lives_before := world.lives
     var required := world.xp_required
     world.add_xp(required)
-    check(world.xp_level == 2, "Filling the XP bar should level up")
-    check(world.lives == lives_before + 1, "XP level up should grant one extra life")
-    check(world.balls.size() == balls_before, "XP level up should not change ball count")
+    check(world.xp_level == 2, "Filling the XP bar should reach level 2")
+    check(world.lives == lives_before + 1, "Level 2 should grant one extra life")
+    check(world.balls.size() == balls_before, "Level 2 should not change ball count")
     check(world.xp_flash > 0.0, "XP level up should trigger the bar flash")
+    var balls_before_level_3 := world.balls.size()
+    var lives_before_level_3 := world.lives
+    world.add_xp(world.xp_required)
+    check(world.xp_level == 3, "Filling the next XP bar should reach level 3")
+    check(world.balls.size() == balls_before_level_3 * 2, "Level 3 should split current balls")
+    check(world.lives == lives_before_level_3, "Level 3 should not grant a life")
     check(world.xp_required > required, "Next XP requirement should increase")
     check(world.xp < world.xp_required, "XP remainder should be below the new requirement")
     world.reset_run()
