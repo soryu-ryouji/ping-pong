@@ -111,10 +111,10 @@ func handle_event(event: GameEvent, world: GameWorld) -> void:
                     rng.randf_range(240.0, 780.0)
                 )
                 emit_fire_ember(position)
-        GameEvent.Type.WAVE_CLEARED:
+        GameEvent.Type.LEVEL_CLEARED:
             flash_alpha = maxf(flash_alpha, 0.22)
             shake = maxf(shake, 6.0)
-        GameEvent.Type.WAVE_STARTED:
+        GameEvent.Type.LEVEL_STARTED:
             flash_alpha = maxf(flash_alpha, 0.18)
         GameEvent.Type.MESSAGE:
             add_floater(event.position, event.text, event.color, event.size, event.lifetime)

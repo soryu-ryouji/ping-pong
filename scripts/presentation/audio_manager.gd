@@ -15,7 +15,7 @@ func _ready() -> void:
     sounds[GameEvent.Type.BALL_LOST] = synth_sound(150.0, 0.42, 0.28, 0.16, 0.8)
     sounds[GameEvent.Type.BRICK_DESTROYED] = synth_sound(760.0, 0.085, 0.34, 0.20, 1.9)
     sounds[GameEvent.Type.FIRE_STARTED] = synth_sound(260.0, 0.65, 0.26, 0.46, 0.55)
-    sounds[GameEvent.Type.WAVE_CLEARED] = synth_sound(980.0, 0.5, 0.24, 0.02, 0.7)
+    sounds[GameEvent.Type.LEVEL_CLEARED] = synth_sound(980.0, 0.5, 0.24, 0.02, 0.7)
     sounds[GameEvent.Type.POWERUP_COLLECTED] = synth_sound(640.0, 0.28, 0.30, 0.10, 1.1)
     for index in range(10):
         var player := AudioStreamPlayer.new()
@@ -40,7 +40,7 @@ func handle_event(event: GameEvent) -> void:
             play_sound(event.type, -12.0, rng.randf_range(0.88, 1.18))
         GameEvent.Type.FIRE_STARTED:
             play_sound(event.type, -3.0, rng.randf_range(0.96, 1.04))
-        GameEvent.Type.WAVE_CLEARED:
+        GameEvent.Type.LEVEL_CLEARED:
             play_sound(event.type, -4.0)
         GameEvent.Type.POWERUP_COLLECTED:
             play_sound(event.type, -4.0, event.value)

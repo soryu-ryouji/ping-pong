@@ -12,10 +12,11 @@ var input := PlayerInputController.new()
 func _ready() -> void:
     config = load("res://resources/game_config.tres")
     assert(config != null, "Game config could not be loaded")
-    assert(config.level != null, "Game config requires a level")
+    assert(not config.level_manifest.is_empty(), "Game config requires a level manifest")
     assert(config.powerups != null, "Game config requires a powerup catalog")
 
     world = GameWorld.new(config)
+    assert(not world.levels.is_empty(), "Level manifest did not load any levels")
     world.reset_run()
     effects = GameEffects.new()
 

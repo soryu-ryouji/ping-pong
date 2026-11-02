@@ -12,12 +12,15 @@ const DANGER := Color("#ff4d79")
 enum State { READY, PLAYING, CLEARED, GAME_OVER }
 
 var config: GameConfig
+var levels: Array[LevelDefinition] = []
 var rng := RandomNumberGenerator.new()
 var collision := CollisionSystem.new()
 var events: Array[GameEvent] = []
 
 var state := State.READY
 var wave := 1
+var level_index := 0
+var loop_count := 1
 var lives := 5
 var lost_count := 0
 var combo := 0
@@ -45,11 +48,14 @@ var powerup_drop_counter := 0
 func _init(game_config: GameConfig) -> void:
     config = game_config
     rng.seed = config.random_seed
+    levels = LevelLoader.load_manifest(config.level_manifest)
 
 
 func reset_run() -> void:
     rng.seed = config.random_seed
     wave = 1
+    level_index = 0
+    loop_count = 1
     lives = config.initial_lives
     lost_count = 0
     combo = 0
@@ -68,8 +74,16 @@ func reset_run() -> void:
 
 
 func build_level() -> void:
-    bricks = LevelGenerator.generate(config.level, wave, rng)
-    walls = config.level.walls.duplicate()
+    var definition := current_level()
+    if definition == null:
+        bricks = []
+        walls = []
+        total_bricks = 1
+        remaining_bricks = 0
+        clear_fraction = 1.0
+        return
+    bricks = LevelGenerator.generate(definition, rng)
+    walls = definition.walls.duplicate()
     total_bricks = maxi(bricks.size(), 1)
     remaining_bricks = 0
     for brick in bricks:
@@ -87,18 +101,31 @@ func reset_ball_state() -> void:
     respawn_timer = 0.0
 
 
-func next_wave() -> void:
+func next_level() -> void:
     wave += 1
     combo = 0
     next_multiball_at = config.combo_first_multiball
     fire_energy = 0.0
     fire_time = 0.0
+    if levels.is_empty():
+        state = State.READY
+        return
+    level_index += 1
+    if level_index >= levels.size():
+        level_index = 0
+        loop_count += 1
     build_level()
     reset_ball_state()
     state = State.READY
-    var event := emit_event(GameEvent.Type.WAVE_STARTED, Vector2(config.screen_size.x * 0.5, 350.0), CYAN)
+    var event := emit_event(GameEvent.Type.LEVEL_STARTED, Vector2(config.screen_size.x * 0.5, 350.0), CYAN)
     event.value = wave
-    add_message(event.position, "WAVE %02d" % wave, CYAN, 28, 1.1)
+    var definition := current_level()
+    var title := "LEVEL %02d" % (level_index + 1)
+    if definition != null and not definition.display_name.is_empty():
+        title += "  " + definition.display_name.to_upper()
+    add_message(event.position, title, CYAN, 26, 1.2)
+    if level_index == 0 and loop_count > 1:
+        add_message(event.position + Vector2(0.0, 34.0), "LOOP %02d" % loop_count, GOLD, 18, 1.4)
 
 
 func primary_action() -> void:
@@ -135,7 +162,7 @@ func step(delta: float) -> void:
     elif state == State.CLEARED:
         state_timer -= delta
         if state_timer <= 0.0:
-            next_wave()
+            next_level()
 
     update_bricks(delta)
 
@@ -338,9 +365,25 @@ func clear_level() -> void:
     clear_fraction = 1.0
     powerups.clear()
     combo += 25
-    emit_event(GameEvent.Type.WAVE_CLEARED, Vector2(config.screen_size.x * 0.5, 330.0), GREEN)
-    add_message(Vector2(config.screen_size.x * 0.5, 330.0), "WAVE CLEAR", GREEN, 34, 1.5)
+    emit_event(GameEvent.Type.LEVEL_CLEARED, Vector2(config.screen_size.x * 0.5, 330.0), GREEN)
+    add_message(Vector2(config.screen_size.x * 0.5, 330.0), "LEVEL CLEAR", GREEN, 34, 1.5)
     add_message(Vector2(config.screen_size.x * 0.5, 376.0), "+25 BONUS", GOLD, 20, 1.4)
+
+
+func current_level() -> LevelDefinition:
+    if levels.is_empty() or level_index < 0 or level_index >= levels.size():
+        return null
+    return levels[level_index]
+
+
+func next_level_index() -> int:
+    if levels.is_empty():
+        return 0
+    return (level_index + 1) % levels.size()
+
+
+func is_last_level() -> bool:
+    return levels.is_empty() or level_index >= levels.size() - 1
 
 
 func update_bricks(delta: float) -> void:

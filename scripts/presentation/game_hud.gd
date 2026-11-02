@@ -25,7 +25,7 @@ var footer_hint: Label
 func setup(game_world: GameWorld, game_effects: GameEffects) -> void:
     world = game_world
     effects = game_effects
-    wave_label = make_label("WAVE 01", Vector2(23, 8), Vector2(220, 25), 17, CYAN, HORIZONTAL_ALIGNMENT_LEFT)
+    wave_label = make_label("LEVEL 01/01  ·  LOOP 01", Vector2(23, 8), Vector2(300, 25), 17, CYAN, HORIZONTAL_ALIGNMENT_LEFT)
     title_label = make_label("LABYRINTH / RICOCHET", Vector2(42, 45), Vector2(430, 28), 19, Color("#b2c5d8"), HORIZONTAL_ALIGNMENT_LEFT)
     combo_header = make_label("COMBO", Vector2(500, 1), Vector2(190, 18), 12, Color("#b9974c"), HORIZONTAL_ALIGNMENT_RIGHT)
     combo_label = make_label("×0", Vector2(500, 12), Vector2(190, 50), 42, GOLD, HORIZONTAL_ALIGNMENT_RIGHT)
@@ -59,7 +59,13 @@ func make_label(text: String, position: Vector2, size: Vector2, font_size: int, 
 func update_view() -> void:
     if world == null:
         return
-    wave_label.text = "WAVE %02d" % world.wave
+    var level := world.current_level()
+    var level_count := maxi(world.levels.size(), 1)
+    wave_label.text = "LEVEL %02d/%02d  ·  LOOP %02d" % [world.level_index + 1, level_count, world.loop_count]
+    if level != null and not level.display_name.is_empty():
+        title_label.text = "%s  ·  WAVE %02d" % [level.display_name.to_upper(), world.wave]
+    else:
+        title_label.text = "LABYRINTH / RICOCHET"
     combo_label.text = "×%d" % world.combo
     clear_label.text = "%d%% CLEAR" % int(round(world.clear_fraction * 100.0))
     balls_label.text = "%02d BALLS" % maxi(1, world.balls.size()) if world.state == GameWorld.State.READY else "%02d BALLS" % world.balls.size()
@@ -82,7 +88,14 @@ func update_view() -> void:
         GameWorld.State.GAME_OVER:
             show_status("GAME OVER", "CLICK / SPACE TO RESTART", PINK)
         GameWorld.State.CLEARED:
-            show_status("WAVE CLEAR", "NEXT WAVE INCOMING", GREEN)
+            var next_hint := "NEXT LEVEL INCOMING"
+            if world.is_last_level():
+                next_hint = "LOOPING TO LEVEL 01"
+            else:
+                var next_level := world.levels[world.next_level_index()]
+                if not next_level.display_name.is_empty():
+                    next_hint = "NEXT: " + next_level.display_name.to_upper()
+            show_status("LEVEL CLEAR", next_hint, GREEN)
         GameWorld.State.PLAYING:
             status_label.visible = false
             status_hint.visible = false
