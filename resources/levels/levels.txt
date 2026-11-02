@@ -5,3 +5,4 @@
 01_labyrinth.txt
 02_corridors.txt
 03_core.txt
+04_line.txt
