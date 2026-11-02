@@ -15,9 +15,11 @@ func _initialize() -> void:
     test_paddle_shrink_on_loss()
     test_wall_penetration_resolution()
     test_breakable_wall_hp()
+    test_level_clear_requires_walls()
     test_breakable_wall_collision_speed()
     test_speed_powerup_uncapped()
     test_stuck_ball_rescue()
+    test_combo_reward_is_extra_life()
     test_xp_level_up()
     test_brick_hit_stages()
     quit(1 if failures > 0 else 0)
@@ -219,8 +221,8 @@ func test_paddle_shrink_on_loss() -> void:
     world.balls.append(ball)
     world.state = GameWorld.State.PLAYING
     world.step(0.016)
-    var expected := config.paddle_width + (200.0 - config.paddle_width) / 3.0
-    check(is_equal_approx(world.paddle_width, expected), "Ball loss should remove two thirds of extra paddle width")
+    var expected := 200.0 - config.paddle_shrink_per_loss
+    check(is_equal_approx(world.paddle_width, expected), "Ball loss should shrink paddle by 20px")
     check(world.paddle_move_speed() > speed_before, "Ball loss shrink should restore some paddle move speed")
 
 
@@ -241,6 +243,33 @@ func test_breakable_wall_hp() -> void:
     check(wall.alive, "Breakable wall should survive until the final hit")
     world.hit_breakable_wall(wall, config.breakable_wall_min_speed)
     check(not wall.alive, "Breakable wall should break after 99 qualifying hits")
+
+
+func test_level_clear_requires_walls() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    var target_index := -1
+    for index in range(world.levels.size()):
+        if world.levels[index].breakable_walls.size() > 0:
+            target_index = index
+            break
+    check(target_index >= 0, "At least one level should contain breakable walls")
+    if target_index < 0:
+        return
+    world.level_index = target_index
+    world.build_level()
+    world.reset_ball_state()
+    for brick in world.bricks:
+        if brick.alive:
+            world.destroy_brick(brick)
+    check(world.remaining_bricks == 0, "All bricks should be cleared")
+    check(world.state != GameWorld.State.CLEARED, "Level should not clear while breakable walls remain")
+    for wall in world.breakable_walls:
+        wall.hp = 1
+        world.hit_breakable_wall(wall, config.breakable_wall_min_speed)
+    check(world.remaining_breakable_walls == 0, "All breakable walls should be cleared")
+    check(world.state == GameWorld.State.CLEARED, "Level should clear after bricks and walls are gone")
 
 
 func test_breakable_wall_collision_speed() -> void:
@@ -321,6 +350,20 @@ func test_wall_penetration_resolution() -> void:
     check(ball.velocity.length() > before_speed, "Wall bounce should increase ball speed")
 
 
+func test_combo_reward_is_extra_life() -> void:
+    var config: GameConfig = load("res://resources/game_config.tres")
+    var world := GameWorld.new(config)
+    world.reset_run()
+    world.primary_action()
+    var lives_before := world.lives
+    var balls_before := world.balls.size()
+    for index in range(config.combo_first_life_reward):
+        world.on_paddle_hit(Vector2(world.paddle_x, config.paddle_y))
+    check(world.combo == config.combo_first_life_reward, "Combo should reach the first reward threshold")
+    check(world.lives == lives_before + 1, "Combo threshold should grant an extra life")
+    check(world.balls.size() == balls_before, "Combo threshold should not add balls")
+
+
 func test_xp_level_up() -> void:
     var config: GameConfig = load("res://resources/game_config.tres")
     var world := GameWorld.new(config)
@@ -335,12 +378,15 @@ func test_xp_level_up() -> void:
         world.xp_gain_for_combo(100) > world.xp_gain_for_combo(10),
         "Higher combo should grant more XP per hit"
     )
+    check(config.level_up_reward != null, "Game config should assign a level-up reward")
     world.primary_action()
     var balls_before := world.balls.size()
+    var lives_before := world.lives
     var required := world.xp_required
     world.add_xp(required)
     check(world.xp_level == 2, "Filling the XP bar should level up")
-    check(world.balls.size() == balls_before * 2, "XP level up should double current balls")
+    check(world.lives == lives_before + 1, "XP level up should grant one extra life")
+    check(world.balls.size() == balls_before, "XP level up should not change ball count")
     check(world.xp_flash > 0.0, "XP level up should trigger the bar flash")
     check(world.xp_required > required, "Next XP requirement should increase")
     check(world.xp < world.xp_required, "XP remainder should be below the new requirement")
