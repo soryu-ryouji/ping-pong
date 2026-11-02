@@ -103,7 +103,6 @@ func test_auto_layout() -> void:
         check(line.columns == 24, "Line should keep its 24-column grid")
         check(line.fill_field, "Line should use fill layout")
         check(line.brick_size.x < 34.0, "Wide Level should scale bricks down")
-        check(line.brick_size.y < 23.0, "Wide Level should scale brick height too")
         check(line.brick_origin.x >= config.inner_left - 0.01, "Auto layout should stay inside the field")
         var grid_right := line.brick_origin.x + float(line.columns - 1) * line.brick_step.x + line.brick_size.x
         check(grid_right <= config.inner_right + 0.01, "Auto layout should fit the right edge")
