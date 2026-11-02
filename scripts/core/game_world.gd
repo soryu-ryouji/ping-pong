@@ -24,13 +24,15 @@ var loop_count := 1
 var lives := 5
 var lost_count := 0
 var combo := 0
-var next_multiball_at := 30
+var next_life_reward_at := 30
 var xp := 0.0
 var xp_level := 1
 var xp_required := 150.0
 var xp_flash := 0.0
 var remaining_bricks := 0
 var total_bricks := 1
+var remaining_breakable_walls := 0
+var total_breakable_walls := 0
 var clear_fraction := 0.0
 var fire_energy := 0.0
 var fire_time := 0.0
@@ -71,7 +73,7 @@ func reset_run() -> void:
     lives = config.initial_lives
     lost_count = 0
     combo = 0
-    next_multiball_at = config.combo_first_multiball
+    next_life_reward_at = config.combo_first_life_reward
     xp = 0.0
     xp_level = 1
     xp_required = maxf(config.xp_required_base, 1.0)
@@ -99,6 +101,8 @@ func build_level() -> void:
         breakable_walls.clear()
         total_bricks = 1
         remaining_bricks = 0
+        remaining_breakable_walls = 0
+        total_breakable_walls = 0
         clear_fraction = 1.0
         return
     bricks = LevelGenerator.generate(definition, rng)
@@ -119,7 +123,9 @@ func build_level() -> void:
     for brick in bricks:
         if brick.alive:
             remaining_bricks += 1
-    clear_fraction = 1.0 - float(remaining_bricks) / float(total_bricks)
+    total_breakable_walls = breakable_walls.size()
+    remaining_breakable_walls = total_breakable_walls
+    _update_clear_fraction()
 
 
 func reset_ball_state() -> void:
@@ -179,7 +185,7 @@ func _begin_level(debug_jump: bool) -> void:
     if debug_jump and state == State.GAME_OVER:
         lives = config.initial_lives
     combo = 0
-    next_multiball_at = config.combo_first_multiball
+    next_life_reward_at = config.combo_first_life_reward
     fire_energy = 0.0
     fire_time = 0.0
     state_timer = 0.0
@@ -301,7 +307,7 @@ func update_balls(delta: float) -> void:
             balls.remove_at(index)
             lost_count += 1
             combo = 0
-            next_multiball_at = config.combo_first_multiball
+            next_life_reward_at = config.combo_first_life_reward
             _shrink_paddle_after_loss()
             emit_event(GameEvent.Type.BALL_LOST, lost_position, DANGER)
             add_message(lost_position, "BALL LOST", DANGER, 18, 0.9)
@@ -348,16 +354,15 @@ func _rescue_stuck_ball(ball: BallData) -> void:
 
 
 func _shrink_paddle_after_loss() -> void:
-    var extra := maxf(0.0, paddle_width - config.paddle_width)
-    if extra <= 0.0:
+    var shrink := minf(config.paddle_shrink_per_loss, maxf(0.0, paddle_width - config.paddle_width))
+    if shrink <= 0.0:
         return
-    var lost_width := extra * 2.0 / 3.0
-    paddle_width = maxf(config.paddle_width, paddle_width - lost_width)
+    paddle_width -= shrink
     paddle_target_x = _clamp_paddle_x(paddle_target_x)
     paddle_x = _clamp_paddle_x(paddle_x)
     add_message(
         Vector2(paddle_x, config.paddle_y - 70.0),
-        "WIDTH -%d" % int(round(lost_width)),
+        "WIDTH -%d" % int(round(shrink)),
         DANGER,
         14,
         0.6
@@ -383,8 +388,10 @@ func add_xp(amount: float) -> void:
             GOLD
         )
         event.value = xp_level
-        var added := double_balls(GOLD)
-        var label := "LEVEL UP  ·  BALLS ×2" if added > 0 else "LEVEL UP"
+        var reward_text := apply_level_up_reward(config.level_up_reward)
+        var label := "LEVEL UP"
+        if not reward_text.is_empty():
+            label += "  ·  " + reward_text
         add_message(
             Vector2(config.screen_size.x * 0.5, config.field_bottom - 60.0),
             label,
@@ -392,6 +399,13 @@ func add_xp(amount: float) -> void:
             28,
             1.2
         )
+
+
+func apply_level_up_reward(reward: UpgradeReward = null) -> String:
+    var chosen := reward if reward != null else config.level_up_reward
+    if chosen == null:
+        return ""
+    return chosen.apply(self)
 
 
 func double_balls(event_color: Color = CYAN) -> int:
@@ -502,10 +516,13 @@ func on_paddle_hit(hit_position: Vector2) -> void:
     combo += 1
     notify_combo_pop()
     add_xp(xp_gain_for_combo(combo))
-    while combo >= next_multiball_at and balls.size() < config.combo_multiball_limit:
-        next_multiball_at += config.combo_multiball_interval
-        launch_ball(true)
-        add_message(Vector2(paddle_x, config.paddle_y - 58.0), "MULTIBALL", CYAN, 18, 0.8)
+    while combo >= next_life_reward_at:
+        next_life_reward_at += config.combo_life_reward_interval
+        var reward_text := apply_level_up_reward(config.level_up_reward)
+        var reward_label := "COMBO REWARD"
+        if not reward_text.is_empty():
+            reward_label += "  ·  " + reward_text
+        add_message(Vector2(paddle_x, config.paddle_y - 58.0), reward_label, GOLD, 20, 1.0)
 
 
 func hit_breakable_wall(wall: BreakableWallData, ball_speed: float) -> bool:
@@ -520,6 +537,10 @@ func hit_breakable_wall(wall: BreakableWallData, ball_speed: float) -> bool:
     var center := wall.rect.get_center()
     if wall.hp <= 0:
         wall.alive = false
+        if breakable_walls.has(wall):
+            remaining_breakable_walls = maxi(0, remaining_breakable_walls - 1)
+            _update_clear_fraction()
+            _check_level_clear()
         var destroyed := emit_event(GameEvent.Type.BREAKABLE_WALL_DESTROYED, center, GOLD)
         destroyed.value = wall.max_hp
         add_message(center, "WALL BREAK", GOLD, 20, 0.9)
@@ -560,6 +581,7 @@ func destroy_brick(brick: BrickData) -> void:
 
     var event := emit_event(GameEvent.Type.BRICK_DESTROYED, center, brick.color)
     event.value = gain
+    event.size = brick.max_hp
     add_message(center, "+%d" % gain, brick.color.lightened(0.35), 14, 0.45)
 
     if fire:
@@ -571,9 +593,8 @@ func destroy_brick(brick: BrickData) -> void:
     if fire_energy >= 100.0 and not fire:
         start_fire_rush()
 
-    clear_fraction = 1.0 - float(remaining_bricks) / float(total_bricks)
-    if remaining_bricks <= 0:
-        clear_level()
+    _update_clear_fraction()
+    _check_level_clear()
 
 
 func start_fire_rush() -> void:
@@ -583,6 +604,17 @@ func start_fire_rush() -> void:
     fire_energy = 100.0
     emit_event(GameEvent.Type.FIRE_STARTED, Vector2(config.screen_size.x * 0.5, 565.0), ORANGE)
     add_message(Vector2(config.screen_size.x * 0.5, 565.0), "FIRE RUSH", ORANGE, 34, 1.2)
+
+
+func _update_clear_fraction() -> void:
+    var total := maxi(total_bricks + total_breakable_walls, 1)
+    var remaining := remaining_bricks + remaining_breakable_walls
+    clear_fraction = 1.0 - float(remaining) / float(total)
+
+
+func _check_level_clear() -> void:
+    if remaining_bricks <= 0 and remaining_breakable_walls <= 0:
+        clear_level()
 
 
 func clear_level() -> void:

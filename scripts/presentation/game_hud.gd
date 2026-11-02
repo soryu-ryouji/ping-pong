@@ -91,7 +91,7 @@ func update_view() -> void:
     debug_label.visible = world.config.debug_tools
     clear_label.text = "%d%% CLEAR" % int(round(world.clear_fraction * 100.0))
     balls_label.text = "%02d BALLS" % maxi(1, world.balls.size()) if world.state == GameWorld.State.READY else "%02d BALLS" % world.balls.size()
-    lost_label.text = "LOST %d" % world.lost_count
+    lost_label.text = "LIVES %d  ·  LOST %d" % [world.lives, world.lost_count]
 
     if world.is_fire_active():
         fire_label.text = "FIRE RUSH %.1fs" % world.fire_time

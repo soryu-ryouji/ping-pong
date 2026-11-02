@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="GameConfig" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="GameConfig" load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/game_config.gd" id="1"]
 [ext_resource type="Resource" path="res://resources/powerup_catalog.tres" id="3"]
+[ext_resource type="Resource" path="res://resources/upgrades/extra_life.tres" id="4"]
 
 [resource]
 script = ExtResource("1")
@@ -20,6 +21,7 @@ paddle_y = 824.0
 paddle_width = 116.0
 paddle_height = 14.0
 paddle_grow_per_hit = 10.0
+paddle_shrink_per_loss = 20.0
 paddle_base_move_speed = 760.0
 paddle_min_move_speed = 580.0
 initial_lives = 5
@@ -29,9 +31,8 @@ wave_speed_increment = 18.0
 bounce_speed_increment = 1.5
 max_ball_speed = 1410.0
 maximum_launch_balls = 7
-combo_multiball_limit = 6
-combo_first_multiball = 30
-combo_multiball_interval = 35
+combo_first_life_reward = 30
+combo_life_reward_interval = 35
 breakable_wall_hp = 99
 breakable_wall_min_speed = 900.0
 xp_base_gain = 1.0
@@ -47,4 +48,5 @@ fire_duration = 6.0
 fire_charge_per_hit = 3.4
 level_manifest = "res://resources/levels/levels.txt"
 debug_tools = true
+level_up_reward = ExtResource("4")
 powerups = ExtResource("3")

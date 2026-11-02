@@ -16,6 +16,7 @@ extends Resource
 @export var paddle_width := 116.0
 @export var paddle_height := 14.0
 @export var paddle_grow_per_hit := 10.0
+@export var paddle_shrink_per_loss := 20.0
 @export var paddle_base_move_speed := 760.0
 @export var paddle_min_move_speed := 580.0
 
@@ -26,15 +27,15 @@ extends Resource
 @export var bounce_speed_increment := 1.5
 @export var max_ball_speed := 1410.0
 @export var maximum_launch_balls := 7
-@export var combo_multiball_limit := 6
-@export var combo_first_multiball := 30
-@export var combo_multiball_interval := 35
+@export var combo_first_life_reward := 30
+@export var combo_life_reward_interval := 35
 @export var breakable_wall_hp := 99
 @export var breakable_wall_min_speed := 900.0
 @export var xp_base_gain := 1.0
 @export var xp_combo_scale := 0.05
 @export var xp_required_base := 150.0
 @export var xp_required_growth := 1.4
+@export var level_up_reward: UpgradeReward
 
 @export_range(0.0, 1.0) var powerup_drop_chance := 0.14
 @export var powerup_pity_limit := 8

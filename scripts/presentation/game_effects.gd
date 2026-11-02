@@ -93,13 +93,15 @@ func handle_event(event: GameEvent, world: GameWorld) -> void:
         GameEvent.Type.BRICK_DESTROYED:
             combo_pop = 1.0
             var fire := world.is_fire_active()
-            shake = maxf(shake, 3.8 if fire else 2.0)
+            var durability := maxi(event.size, 1)
+            shake = maxf(shake, (3.8 if fire else 2.0) + minf(float(durability) * 0.15, 1.4))
             if fire:
-                emit_burst(event.position, ORANGE, 20, 245.0, 3.4, 380.0)
-                emit_burst(event.position, PINK, 10, 170.0, 2.5, 260.0)
+                emit_burst(event.position, ORANGE, 20 + durability * 2, 245.0 + durability * 8.0, 3.4 + durability * 0.2, 380.0)
+                emit_burst(event.position, PINK, 10 + durability, 170.0, 2.5, 260.0)
             else:
-                emit_burst(event.position, event.color.lightened(0.15), 14, 185.0, 3.0, 260.0)
-                emit_burst(event.position, Color.WHITE, 3, 95.0, 1.8, 120.0)
+                emit_burst(event.position, event.color.lightened(0.15), 14 + durability * 2, 185.0 + durability * 8.0, 3.0 + durability * 0.2, 260.0)
+                emit_burst(event.position, event.color, 4 + mini(durability, 6), 125.0, 2.2, 180.0)
+                emit_burst(event.position, Color.WHITE, 3 + mini(durability, 6), 95.0, 1.8, 120.0)
         GameEvent.Type.POWERUP_DROPPED:
             emit_burst(event.position, event.color, 10, 105.0, 2.2, 80.0)
             add_floater(event.position + Vector2(0.0, -16.0), "POWER DROP", event.color, 12, 0.55)
