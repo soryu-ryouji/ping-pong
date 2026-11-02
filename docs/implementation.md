@@ -38,13 +38,13 @@ GameRenderer       GameEffects   GameAudioManager
 
 与关卡布局相关的字段还有 `brick_area_margin`、`brick_area_max_height` 和 `brick_area_bottom`，分别控制 fit 模式的左右留白、砖块区最大高度，以及 fill 模式的底部边界。挡板成长由 `paddle_grow_per_hit` 控制，当前为每次 `+10px`；`GameWorld.paddle_max_width()` 取当前关卡 `brick_wall_width()`，所以挡板不会超过砖墙宽度。挡板的颜色升级按“基础宽度以上的增长量”计算，`paddle_flash` 驱动升级闪光；球掉落时 `_shrink_paddle_after_loss()` 会把额外宽度削减到原来的 `1/3`。
 
-挡板移动由 `paddle_move_speed()` 控制：按当前扩展量在 `paddle_base_move_speed` 和 `paddle_min_move_speed` 之间插值，`update_paddle()` 用限速移动代替固定插值，所以变宽后更考验预判，缩回后速度恢复。
+挡板移动由 `paddle_move_speed()` 控制：按当前扩展量在 `paddle_base_move_speed` 和 `paddle_min_move_speed` 之间插值，`update_paddle()` 用限速移动代替固定插值，所以变宽后更考验预判，缩回后速度恢复。经验曲线由 `xp_base_gain`、`xp_combo_scale`、`xp_required_base` 和 `xp_required_growth` 控制。
 
 小球每次墙面、障碍或砖块反弹都会调用 `boost_ball_speed()`，增加 `bounce_speed_increment`，并统一受 `max_ball_speed = 1410`（初始速度的 3 倍）限制；发球和 SPEED 道具也使用同一个上限。
 
 关卡布局保存在 `resources/levels/*.txt`，格式见 [levels.md](levels.md)。`GameWorld` 启动时用 `LevelLoader` 读取清单，运行时保存 `levels: Array[LevelDefinition]`、`level_index` 和 `loop_count`。
 
-实体采用 `BallData`、`BrickData`、`PowerupData`，不再依赖字符串键字典。`BrickData` 额外保存 `hp` / `max_hp` / `shake`；挡板当前宽度由 `GameWorld.paddle_width` 维护，不再直接读取配置值。游戏状态使用 `GameWorld.State` 枚举。
+实体采用 `BallData`、`BrickData`、`PowerupData`，不再依赖字符串键字典。`BrickData` 额外保存 `hp` / `max_hp` / `shake`；挡板当前宽度由 `GameWorld.paddle_width` 维护，不再直接读取配置值。经验状态由 `GameWorld.xp`、`xp_level`、`xp_required` 和 `xp_flash` 维护。游戏状态使用 `GameWorld.State` 枚举。
 
 ## 3. 新增道具
 
@@ -91,7 +91,9 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 
 `GameWorld.build_level()` 每次从当前 `LevelDefinition` 生成砖块和墙；清关倒计时结束后 `next_level()` 推进 `level_index`，越过末尾时回到 `0` 并增加 `loop_count`。`wave` 是全局难度计数，持续增长并影响基础球速。
 
-碰撞到多段耐久砖时，`CollisionSystem` 调用 `GameWorld.hit_brick()`。未击碎时砖块进入 `shake` 状态并发出 `BRICK_HIT`；击碎时才进入 `destroy_brick()`，结算 COMBO、FIRE 和道具。FIRE RUSH 传入高伤害，直接击碎。
+碰撞到多段耐久砖时，`CollisionSystem` 调用 `GameWorld.hit_brick()`。未击碎时砖块进入 `shake` 状态并发出 `BRICK_HIT`；击碎时才进入 `destroy_brick()`，结算 FIRE、道具和清除进度。FIRE RUSH 传入高伤害，直接击碎。
+
+`on_paddle_hit()` 增加接球 COMBO，并发出 `COMBO_POP` 让右上角数字弹跳/抖动；同时按当前 COMBO 调用 `add_xp()`；满条后 `xp_required` 按 `xp_required_growth` 增长，发出 `XP_LEVEL_UP`，并通过 `double_balls()` 翻倍当前球数（上限 `powerup_max_balls`）。`double_balls()` 同时被 MULTI 道具复用。破砖不增加 COMBO 或 XP。
 
 若需要完全不同的生成算法，可以替换 `LevelGenerator`，或在 `LevelDefinition` 中增加字段，而不必修改碰撞或表现模块。
 
@@ -122,9 +124,11 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 - `BALL_LAUNCHED` / `BALL_LOST` / `BALL_SPLIT`
 - `WALL_HIT` / `OBSTACLE_HIT` / `PADDLE_HIT`
 - `BRICK_HIT` / `BRICK_DESTROYED` / `POWERUP_DROPPED` / `POWERUP_COLLECTED`
-- `FIRE_STARTED` / `FIRE_ENDED`
+- `FIRE_STARTED` / `FIRE_ENDED` / `XP_LEVEL_UP`
 - `LEVEL_CLEARED` / `LEVEL_STARTED` / `GAME_OVER` / `RUN_RESET`
 - `MESSAGE` / `COMBO_POP`
+
+HUD 的 COMBO 字号由 `combo_font_size()` 按 `10 / 30 / 50 / 100 / 200 / 500` 阈值切换，COMBO 标签的位移和缩放由 `GameEffects.combo_pop` 驱动。
 
 新增表现时优先消费现有语义事件，避免让核心世界引用表现类。
 
@@ -141,7 +145,7 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 
 - `tests/powerup_test.gd`：道具拾取、1 → 2 → 4 多球、速度提升、保底和掉落顺序。
 - `tests/level_test.gd`：关卡清单、文本解析、符号配色、多段耐久、自动布局、墙体与砖块生成。
-- `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时、关卡循环、开发者跳关、挡板成长/收缩与移动速度、反弹加速上限、卡球救援和多段耐久砖。
+- `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时、关卡循环、开发者跳关、挡板成长/收缩与移动速度、反弹加速上限、卡球救援、多段耐久砖和经验升级。
 - `tests/scene_smoke_test.gd`：主场景组合、模块创建和发射流程。
 - `tests/powerup_preview.gd`：生成道具预览图。
 
