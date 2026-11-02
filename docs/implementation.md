@@ -20,8 +20,9 @@ GameRenderer       GameEffects   GameAudioManager
 ```
 
 - `scripts/main.gd`：唯一组合根，创建模块、推进固定物理步、转发事件。
-- `GameWorld`：状态机、计分、命数、多球、火焰冲刺、道具和波次。
+- `GameWorld`：状态机、计分、命数、多球、火焰冲刺、道具和关卡循环。
 - `CollisionSystem`：子步进和碰撞响应；`CollisionGeometry` 是纯几何计算。
+- `LevelLoader`：读取关卡清单和文本网格，解析成 `LevelDefinition`。
 - `LevelGenerator`：从 `LevelDefinition` 生成砖块。
 - `GameEvent`：玩法到表现层的局部事件，不使用全局单例。
 - `presentation/`：只读取世界或消费事件，不修改玩法随机数。
@@ -32,8 +33,10 @@ GameRenderer       GameEffects   GameAudioManager
 
 `resources/game_config.tres` 是默认配置，包含场地、挡板、速度、命数、连击、道具掉落和火焰冲刺数值，并引用：
 
-- `level`：当前 `LevelDefinition`。
+- `level_manifest`：关卡顺序清单，默认 `res://resources/levels/levels.txt`。
 - `powerups`：当前 `PowerupCatalog`。
+
+关卡布局保存在 `resources/levels/*.txt`，格式见 [levels.md](levels.md)。`GameWorld` 启动时用 `LevelLoader` 读取清单，运行时保存 `levels: Array[LevelDefinition]`、`level_index` 和 `loop_count`。
 
 实体采用 `BallData`、`BrickData`、`PowerupData`，不再依赖字符串键字典。游戏状态使用 `GameWorld.State` 枚举。
 
@@ -72,16 +75,15 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 
 ## 4. 新增或调整关卡
 
-复制 `resources/levels/labyrinth.tres`，修改：
+关卡是外部文本，不在 `.tres` 里配置：
 
-- `rows` / `columns`
-- `brick_origin` / `brick_size` / `brick_step`
-- `carved_cells`：固定空格，坐标为 `Vector2i(column, row)`
-- `random_carve_chance`
-- `walls`：静态 AABB 障碍
-- 色相范围和后续波次预清除数量
+1. 在 `resources/levels/` 新建 `.txt`，写 `name`、可选的格子参数和 `grid:` 网格。
+2. 把文件名加入 `resources/levels/levels.txt`。
+3. 运行 `tests/level_test.gd` 检查解析、砖块生成和墙体不重叠。
 
-然后把 `game_config.tres` 的 `level` 指向新资源。若需要完全不同的生成算法，可新增生成器，而不必修改碰撞或表现模块。
+完整格式、符号表和编关流程见 [levels.md](levels.md)。`GameWorld.build_level()` 每次从当前 `LevelDefinition` 生成砖块和墙；清关倒计时结束后 `next_level()` 推进 `level_index`，越过末尾时回到 `0` 并增加 `loop_count`。`wave` 是全局难度计数，持续增长并影响基础球速。
+
+若需要完全不同的生成算法，可以替换 `LevelGenerator`，或在 `LevelDefinition` 中增加字段，而不必修改碰撞或表现模块。
 
 ## 5. 模拟与事件
 
@@ -89,7 +91,7 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 
 1. 更新挡板平滑运动。
 2. `PLAYING` 下更新火焰计时、重生、道具和球。
-3. `CLEARED` 下更新波次倒计时。
+3. `CLEARED` 下更新关卡切换倒计时。
 4. 更新砖块闪光状态。
 
 球按速度动态拆分子步，每步最多移动约 4.5 像素，依次处理外墙、丢球、挡板、迷宫墙和砖块。`CollisionGeometry.circle_rect_hit()` 返回 `CollisionHit` 或 `null`，包含法线和穿透深度。
@@ -100,7 +102,7 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 - `WALL_HIT` / `OBSTACLE_HIT` / `PADDLE_HIT`
 - `BRICK_DESTROYED` / `POWERUP_DROPPED` / `POWERUP_COLLECTED`
 - `FIRE_STARTED` / `FIRE_ENDED`
-- `WAVE_CLEARED` / `WAVE_STARTED` / `GAME_OVER` / `RUN_RESET`
+- `LEVEL_CLEARED` / `LEVEL_STARTED` / `GAME_OVER` / `RUN_RESET`
 - `MESSAGE` / `COMBO_POP`
 
 新增表现时优先消费现有语义事件，避免让核心世界引用表现类。
@@ -117,7 +119,8 @@ func apply(world: Variant, _pickup_position: Vector2) -> void:
 ## 7. 测试
 
 - `tests/powerup_test.gd`：道具拾取、1 → 2 → 4 多球、速度提升、保底和掉落顺序。
-- `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时。
+- `tests/level_test.gd`：关卡清单、文本解析、符号配色、墙体与砖块生成。
+- `tests/world_test.gd`：碰撞几何、固定输入确定性、火焰计时和关卡循环。
 - `tests/scene_smoke_test.gd`：主场景组合、模块创建和发射流程。
 - `tests/powerup_preview.gd`：生成道具预览图。
 
