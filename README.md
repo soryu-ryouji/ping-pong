@@ -10,6 +10,12 @@
 godot --path .
 ```
 
+## 在线游玩与部署
+
+- 在线地址：https://soryu-ryouji.github.io/ping-pong/
+- 推送 `main` 分支或在 Actions 中手动运行 **Deploy to GitHub Pages**，会自动导出 Web 版并部署。
+- 工作流使用 Godot 4.7.2 和对应导出模板。
+
 ## 操作
 
 - 鼠标 / 触屏左右拖动：移动挡板
